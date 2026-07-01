@@ -11,6 +11,8 @@
  */
 import type { Transport } from './transport.js';
 
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 export const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 export const NUS_RX_CHARACTERISTIC = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 export const NUS_TX_CHARACTERISTIC = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
@@ -24,6 +26,8 @@ export interface WebBluetoothOptions {
    * UUID in the advertisement (the NUS service is still requested for use).
    */
   acceptAllDevices?: boolean;
+  /** Retries for the GATT connect/discovery sequence (default 3). */
+  connectRetries?: number;
   /** Provide an already-selected device (skip the chooser). */
   device?: BluetoothDevice;
 }
@@ -74,10 +78,33 @@ export class WebBluetoothTransport implements Transport {
       }
     }
 
-    const gatt = this.device.gatt;
+    // GATT connect + discovery can transiently fail ("GATT operation failed
+    // for unknown reason"), especially right after another host disconnects.
+    // Retry the whole sequence a few times before giving up.
+    const attempts = Math.max(1, this.options.connectRetries ?? 3);
+    let lastError: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await this.establishGatt();
+        return;
+      } catch (err) {
+        lastError = err;
+        try {
+          this.device?.gatt?.disconnect();
+        } catch {
+          /* ignore */
+        }
+        if (i < attempts - 1) await delay(400);
+      }
+    }
+    throw lastError;
+  }
+
+  private async establishGatt(): Promise<void> {
+    const gatt = this.device?.gatt;
     if (!gatt) throw new Error('selected device has no GATT server');
 
-    this.device.addEventListener('gattserverdisconnected', this.onGattDisconnected);
+    this.device!.addEventListener('gattserverdisconnected', this.onGattDisconnected);
     const server = await gatt.connect();
     const service = await server.getPrimaryService(NUS_SERVICE);
     this.rx = await service.getCharacteristic(NUS_RX_CHARACTERISTIC);
