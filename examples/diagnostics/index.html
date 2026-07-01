@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>meshcore.js — hardware diagnostics</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; max-width: 900px; margin: 1.5rem auto; padding: 0 1rem; }
+      h1 { font-size: 1.3rem; }
+      h2 { font-size: 1rem; margin: 1.2rem 0 0.4rem; }
+      button { padding: 0.4rem 0.7rem; font-size: 0.95rem; cursor: pointer; }
+      input, select { padding: 0.3rem; font-size: 0.95rem; }
+      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin: 0.3rem 0; }
+      .muted { opacity: 0.7; }
+      #log { font-family: ui-monospace, monospace; font-size: 0.8rem; background: #8881;
+             border-radius: 8px; padding: 0.75rem; height: 360px; overflow: auto; white-space: pre-wrap; }
+      fieldset { border: 1px solid #8884; border-radius: 8px; margin: 0.8rem 0; }
+      .ok { color: #2a2; } .warn { color: #c80; } .err { color: #d33; }
+    </style>
+  </head>
+  <body>
+    <h1>meshcore.js — hardware diagnostics</h1>
+    <p class="muted">Chrome/Edge over https or localhost. Connect a MeshCore Companion, then run the
+      baseline. Frame sizes are logged to detect BLE fragmentation.</p>
+
+    <div class="row">
+      <button id="connect">Connect &amp; run baseline</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <button id="copy">Copy full log</button>
+      <span id="status" class="muted">disconnected</span>
+    </div>
+
+    <fieldset>
+      <legend>Interactive tests (after connect)</legend>
+      <div class="row">
+        <label>Send msg to</label>
+        <select id="contact"></select>
+        <input id="msg" placeholder="message text" size="22" />
+        <button id="send" disabled>Send</button>
+      </div>
+      <div class="row">
+        <label>Login</label>
+        <select id="server"></select>
+        <input id="password" placeholder="password" size="14" />
+        <button id="login" disabled>Login</button>
+        <button id="status-req" disabled>Request status</button>
+      </div>
+      <div class="row">
+        <label>Trace / telemetry to</label>
+        <select id="target"></select>
+        <button id="trace" disabled>Trace path</button>
+        <button id="telemetry" disabled>Request telemetry</button>
+      </div>
+    </fieldset>
+
+    <h2>Log</h2>
+    <div id="log"></div>
+
+    <script type="module">
+      import { MeshCore, WebBluetoothTransport, decodeFrame, AdvType } from '../../dist/index.js';
+
+      const $ = (id) => document.getElementById(id);
+      const logEl = $('log');
+      const lines = [];
+      const log = (msg, cls = '') => {
+        const line = `${new Date().toLocaleTimeString()}  ${msg}`;
+        lines.push(line);
+        const span = document.createElement('span');
+        if (cls) span.className = cls;
+        span.textContent = line + '\n';
+        logEl.appendChild(span);
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+      const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+
+      let client = null;
+      let transport = null;
+      let maxFrame = 0;
+      let contacts = [];
+
+      // Raw-frame instrumentation: subscribe to the transport directly so we
+      // see every BLE notification exactly as delivered.
+      function instrument(t) {
+        t.onFrame((frame) => {
+          maxFrame = Math.max(maxFrame, frame.length);
+          let note = '';
+          try {
+            const d = decodeFrame(frame);
+            if (d.type === 'raw') note = `  [unmodeled code 0x${(frame[0] ?? 0).toString(16)}]`;
+          } catch (e) {
+            note = `  [DECODE FAILED: ${e.message} — possible fragmentation!]`;
+            log(`RX frame len=${frame.length} code=0x${(frame[0] ?? 0).toString(16)}${note}`, 'err');
+            log(`   raw: ${hex(frame)}`, 'err');
+            return;
+          }
+          log(`RX frame len=${frame.length} code=0x${(frame[0] ?? 0).toString(16)}${note}`, note ? 'warn' : '');
+        });
+      }
+
+      function fillSelects() {
+        const opt = (c) => `<option value="${c.publicKey}">${c.name} (${['none','chat','repeater','room','sensor'][c.type] ?? c.type})</option>`;
+        $('contact').innerHTML = contacts.map(opt).join('');
+        $('target').innerHTML = contacts.map(opt).join('');
+        const servers = contacts.filter((c) => c.type === AdvType.REPEATER || c.type === AdvType.ROOM);
+        $('server').innerHTML = servers.map(opt).join('');
+      }
+
+      $('connect').addEventListener('click', async () => {
+        try {
+          maxFrame = 0;
+          transport = new WebBluetoothTransport({ namePrefix: 'MeshCore' });
+          instrument(transport);
+          client = new MeshCore(transport);
+          client.on('message', (m) => log(`EVENT message from ${m.senderPrefix ?? 'ch'+m.channelIdx}: "${m.text}" snr=${m.snr}`, 'ok'));
+          client.on('sendConfirmed', (c) => log(`EVENT ack tag=${c.ackTag.toString(16)} rtt=${c.roundTripMillis}ms`, 'ok'));
+          client.on('advert', (pk) => log(`EVENT advert ${pk.slice(0,12)}…`));
+          client.on('disconnect', () => { log('disconnected'); setConnected(false); });
+
+          log('connecting…');
+          const { deviceInfo, selfInfo } = await client.connect();
+          setConnected(true);
+          log(`=== DEVICE_INFO ===`, 'ok');
+          log(`  firmware: ${deviceInfo.manufacturer} ${deviceInfo.firmwareVersion} (ver code ${deviceInfo.firmwareVerCode}, build ${deviceInfo.firmwareBuildDate})`);
+          log(`  maxContacts=${deviceInfo.maxContacts} maxChannels=${deviceInfo.maxChannels}`);
+          log(`=== SELF_INFO ===`, 'ok');
+          log(`  name="${selfInfo.name}" pubkey=${selfInfo.publicKey}`);
+          log(`  ${selfInfo.freq} MHz SF${selfInfo.spreadingFactor} CR${selfInfo.codingRate} tx=${selfInfo.txPower}dBm`);
+
+          // Contacts — the fragmentation stress test (~148-byte frames).
+          log(`=== CONTACTS (watch frame sizes) ===`, 'ok');
+          contacts = await client.getContacts();
+          log(`  ${contacts.length} contacts`);
+          for (const c of contacts) {
+            log(`  - "${c.name}" type=${c.type} key=${c.publicKey.slice(0,12)}… pathLen=${c.outPathLen}`);
+          }
+          fillSelects();
+
+          // Stats
+          try {
+            const core = await client.getCoreStats();
+            log(`=== CORE STATS === batt=${core.batteryMillivolts}mV uptime=${core.uptimeSeconds}s queue=${core.queueLength} errFlags=0x${core.errFlags.toString(16)}`, 'ok');
+            const radio = await client.getRadioStats();
+            log(`=== RADIO STATS === noise=${radio.noiseFloor} lastRSSI=${radio.lastRssi} lastSNR=${radio.lastSnr} txAir=${radio.txAirtimeSeconds}s rxAir=${radio.rxAirtimeSeconds}s`, 'ok');
+            const pkts = await client.getPacketStats();
+            log(`=== PACKET STATS === recv=${pkts.received} sent=${pkts.sent} flood(s/r)=${pkts.sentFlood}/${pkts.recvFlood} direct(s/r)=${pkts.sentDirect}/${pkts.recvDirect} errors=${pkts.recvErrors}`, 'ok');
+          } catch (e) { log(`stats error: ${e.message}`, 'warn'); }
+
+          // Self telemetry
+          try {
+            const t = await client.getSelfTelemetry({ timeoutMs: 6000 });
+            log(`=== SELF TELEMETRY === raw=${hex(t.data)}`, 'ok');
+            for (const r of t.readings) log(`  ch${r.channel} ${r.typeName}: ${r.value}${r.unit}`);
+          } catch (e) { log(`self-telemetry: ${e.message}`, 'warn'); }
+
+          const time = await client.getDeviceTime();
+          log(`=== DEVICE TIME === ${new Date(time.epochSeconds * 1000).toISOString()}`);
+
+          log(`>>> MAX FRAME SIZE OBSERVED: ${maxFrame} bytes ${maxFrame >= 140 ? '(large frames arrive whole — good)' : '(no large frame seen yet; add contacts to stress-test)'}`, 'ok');
+          log(`>>> Baseline complete. Look above for any "DECODE FAILED" lines.`, 'ok');
+        } catch (e) {
+          log(`ERROR: ${e.message}`, 'err');
+        }
+      });
+
+      $('send').addEventListener('click', async () => {
+        try {
+          const to = $('contact').value;
+          const r = await client.sendTextMessage(to, $('msg').value);
+          log(`sent (${r.flood ? 'flood' : 'direct'}) ackTag=${r.expectedAck.toString(16)} est=${r.estTimeout}ms — awaiting ack…`);
+        } catch (e) { log(`send error: ${e.message}`, 'err'); }
+      });
+
+      $('login').addEventListener('click', async () => {
+        try {
+          const res = await client.login($('server').value, $('password').value, { timeoutMs: 15000 });
+          log(`LOGIN OK perms=${res.permissions} acl=${res.aclPermissions} fw=${res.firmwareVerLevel} ts=${res.serverTimestamp}`, 'ok');
+        } catch (e) { log(`login error: ${e.message}`, 'err'); }
+      });
+
+      $('status-req').addEventListener('click', async () => {
+        try {
+          const res = await client.requestStatus($('server').value, { timeoutMs: 15000 });
+          // The raw status blob — paste this back so the parser can be built.
+          log(`=== STATUS RESPONSE raw blob (paste this back) === ${hex(res.data)}`, 'ok');
+          log(`  length=${res.data.length} bytes`);
+        } catch (e) { log(`status error: ${e.message}`, 'err'); }
+      });
+
+      $('trace').addEventListener('click', async () => {
+        try {
+          const c = contacts.find((x) => x.publicKey === $('target').value);
+          const path = c && c.outPathLen > 0 && c.outPathLen <= 64 ? c.outPath : c.publicKey.slice(0, 2);
+          log(`tracing "${c.name}" via path ${path || '(zero-hop)'}…`);
+          const t = await client.tracePath(path, { timeoutMs: 20000 });
+          log(`TRACE tag=${t.tag.toString(16)} finalSNR=${t.finalSnr} hops=${t.hops.map(h => `${h.hash}@${h.snr}dB`).join(' -> ')}`, 'ok');
+        } catch (e) { log(`trace error: ${e.message}`, 'err'); }
+      });
+
+      $('telemetry').addEventListener('click', async () => {
+        try {
+          const t = await client.requestTelemetry($('target').value, { timeoutMs: 20000 });
+          log(`=== TELEMETRY raw=${hex(t.data)}`, 'ok');
+          for (const r of t.readings) log(`  ch${r.channel} ${r.typeName}: ${r.value}${r.unit}`);
+        } catch (e) { log(`telemetry error: ${e.message}`, 'err'); }
+      });
+
+      $('disconnect').addEventListener('click', async () => { await client?.disconnect(); setConnected(false); });
+      $('copy').addEventListener('click', async () => {
+        await navigator.clipboard.writeText(lines.join('\n'));
+        log('(log copied to clipboard)');
+      });
+
+      function setConnected(c) {
+        $('connect').disabled = c;
+        for (const id of ['disconnect', 'send', 'login', 'status-req', 'trace', 'telemetry']) $(id).disabled = !c;
+        $('status').textContent = c ? 'connected' : 'disconnected';
+      }
+    </script>
+  </body>
+</html>
