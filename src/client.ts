@@ -23,6 +23,10 @@ import type {
 import type { ContactInput, RadioParams } from './protocol/encode.js';
 import { ERR_CODE_NAMES } from './protocol/constants.js';
 import { fromHex, toHex } from './protocol/hex.js';
+import { parseTelemetry, type TelemetryReading } from './telemetry.js';
+
+/** A telemetry response with the raw blob decoded into structured readings. */
+export type TelemetryResult = NodeResponse & { readings: TelemetryReading[] };
 
 /** 6-byte public-key prefix (hex) as used to correlate push responses. */
 function pubKeyPrefixHex(key: string | Uint8Array): string {
@@ -304,11 +308,11 @@ export class MeshCore {
     return f.response;
   }
 
-  /** Request telemetry from a remote node; resolves with the raw blob. */
+  /** Request telemetry from a remote node; resolves with parsed readings. */
   async requestTelemetry(
     publicKey: string | Uint8Array,
     options: { timeoutMs?: number } = {},
-  ): Promise<NodeResponse> {
+  ): Promise<TelemetryResult> {
     const prefix = pubKeyPrefixHex(publicKey);
     const pushed = this.waitForPush(
       (f) => f.type === 'telemetryResponse' && f.response.pubKeyPrefix === prefix,
@@ -317,11 +321,11 @@ export class MeshCore {
     expectOk(await this.connection.request(encode.sendTelemetryReq(publicKey)));
     const f = await pushed;
     if (f.type !== 'telemetryResponse') throw new Error(`unexpected ${f.type}`);
-    return f.response;
+    return { ...f.response, readings: parseTelemetry(f.response.data) };
   }
 
   /** Read this device's own telemetry (replies immediately with a push). */
-  async getSelfTelemetry(options: { timeoutMs?: number } = {}): Promise<NodeResponse> {
+  async getSelfTelemetry(options: { timeoutMs?: number } = {}): Promise<TelemetryResult> {
     if (!this.selfInfo) throw new Error('call connect() first');
     const prefix = this.selfInfo.publicKey.slice(0, 12); // 6-byte prefix hex
     const pushed = this.waitForPush(
@@ -331,7 +335,7 @@ export class MeshCore {
     await this.connection.send(encode.sendSelfTelemetryReq());
     const f = await pushed;
     if (f.type !== 'telemetryResponse') throw new Error(`unexpected ${f.type}`);
-    return f.response;
+    return { ...f.response, readings: parseTelemetry(f.response.data) };
   }
 
   // -- device / advertising ----------------------------------------------

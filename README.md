@@ -144,12 +144,17 @@ Handled pushes: `ADVERT`, `NEW_ADVERT`, `PATH_UPDATED`, `SEND_CONFIRMED`, `MSG_W
 // repeater login + status (the correlated push is awaited automatically)
 const session = await client.login(repeaterPubKey, 'password');
 const status = await client.requestStatus(repeaterPubKey); // -> { pubKeyPrefix, data }
+
+// telemetry is parsed from CayenneLPP into structured readings
+const { readings } = await client.requestTelemetry(sensorPubKey);
+for (const r of readings) console.log(`ch${r.channel} ${r.typeName}: ${r.value}${r.unit}`);
 ```
 
-Status/telemetry payloads are returned as raw bytes (`data`) — parsing the device blob format
-is left to the application for now. Not-yet-modelled frames decode to
-`{ type: 'raw', code, payload }` rather than failing, so newer firmware won't break the client.
-Path traces and raw/binary/control data are planned.
+Telemetry blobs are decoded into `TelemetryReading[]` (voltage, temperature, humidity, GPS,
+accelerometer, …) via `parseTelemetry`; the raw `data` is still available. Status payloads
+remain raw bytes. Not-yet-modelled frames decode to `{ type: 'raw', code, payload }` rather than
+failing, so newer firmware won't break the client. Path traces and raw/binary/control data are
+planned.
 
 ## Crypto fidelity
 

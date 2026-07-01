@@ -36,6 +36,13 @@ export {
 } from './channel.js';
 
 export {
+  parseTelemetry,
+  LppType,
+  type TelemetryReading,
+  type GpsReading,
+} from './telemetry.js';
+
+export {
   MeshCoreCrypto,
   loadCryptoWasm,
   type CryptoWasm,

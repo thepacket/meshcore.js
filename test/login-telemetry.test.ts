@@ -181,8 +181,9 @@ class FakeServer implements Transport {
           );
         } else {
           this.push(this.sent());
+          // valid LPP: channel 1, type VOLTAGE (0x74), 3.70V -> 370 = 0x0172
           this.push(
-            new ByteWriter().u8(Push.TELEMETRY_RESPONSE).u8(0).bytes(fromHex(PUB_PREFIX)).bytes(fromHex('beef')).toBytes(),
+            new ByteWriter().u8(Push.TELEMETRY_RESPONSE).u8(0).bytes(fromHex(PUB_PREFIX)).bytes(fromHex('01740172')).toBytes(),
           );
         }
         break;
@@ -231,9 +232,12 @@ describe('login/status/telemetry client flow', () => {
     expect(toHex(res.data)).toBe('aabb');
   });
 
-  it('requestTelemetry resolves with the raw blob', async () => {
+  it('requestTelemetry resolves with parsed readings', async () => {
     const res = await client.requestTelemetry(PUB);
-    expect(toHex(res.data)).toBe('beef');
+    expect(toHex(res.data)).toBe('01740172');
+    expect(res.readings).toHaveLength(1);
+    expect(res.readings[0]).toMatchObject({ channel: 1, typeName: 'voltage' });
+    expect(res.readings[0]!.value).toBeCloseTo(3.7, 2);
   });
 
   it('getSelfTelemetry resolves via a direct push', async () => {
