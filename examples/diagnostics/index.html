@@ -167,7 +167,10 @@
           // Contacts — the fragmentation stress test (~148-byte frames).
           log(`=== CONTACTS (watch frame sizes) ===`, 'ok');
           contacts = await client.getContacts();
-          log(`  ${contacts.length} contacts`);
+          // Sort alphabetically by name (case-insensitive) for readability; this
+          // also orders the send/trace/login dropdowns built from the same list.
+          contacts.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+          log(`  ${contacts.length} contacts (sorted by name)`);
           for (const c of contacts) {
             log(`  - "${c.name}" type=${c.type} key=${c.publicKey.slice(0,12)}… pathLen=${c.outPathLen}`);
           }
