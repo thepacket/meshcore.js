@@ -43,6 +43,16 @@ export {
 } from './telemetry.js';
 
 export {
+  parseRepeaterStatus,
+  parseRoomServerStatus,
+  parseNodeStatus,
+  type NodeStatus,
+  type NodeStatusCommon,
+  type RepeaterStatus,
+  type RoomServerStatus,
+} from './status.js';
+
+export {
   MeshCoreCrypto,
   loadCryptoWasm,
   type CryptoWasm,

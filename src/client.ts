@@ -32,6 +32,7 @@ import { ERR_CODE_NAMES, StatsType } from './protocol/constants.js';
 import type { Stats } from './protocol/types.js';
 import { fromHex, toHex } from './protocol/hex.js';
 import { parseTelemetry, type TelemetryReading } from './telemetry.js';
+import { parseNodeStatus, type NodeStatus } from './status.js';
 
 /** A telemetry response with the raw blob decoded into structured readings. */
 export type TelemetryResult = NodeResponse & { readings: TelemetryReading[] };
@@ -325,6 +326,20 @@ export class MeshCore {
     const f = await pushed;
     if (f.type !== 'statusResponse') throw new Error(`unexpected ${f.type}`);
     return f.response;
+  }
+
+  /**
+   * Request status from a repeater/room node and parse it into structured
+   * fields. `advType` selects the layout (AdvType.ROOM vs repeater); pass the
+   * contact's `type`.
+   */
+  async getNodeStatus(
+    publicKey: string | Uint8Array,
+    advType: number,
+    options: { timeoutMs?: number } = {},
+  ): Promise<NodeStatus> {
+    const res = await this.requestStatus(publicKey, options);
+    return parseNodeStatus(res.data, advType);
   }
 
   /** Request telemetry from a remote node; resolves with parsed readings. */

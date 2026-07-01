@@ -67,7 +67,7 @@
     <div id="log"></div>
 
     <script type="module">
-      import { MeshCore, WebBluetoothTransport, decodeFrame, AdvType } from '../../dist/index.js';
+      import { MeshCore, WebBluetoothTransport, decodeFrame, AdvType, parseNodeStatus } from '../../dist/index.js';
 
       const $ = (id) => document.getElementById(id);
       const logEl = $('log');
@@ -241,10 +241,15 @@
 
       $('status-req').addEventListener('click', async () => {
         try {
-          const res = await client.requestStatus($('server').value, { timeoutMs: 15000 });
-          // The raw status blob — paste this back so the parser can be built.
-          log(`=== STATUS RESPONSE raw blob (paste this back) === ${hex(res.data)}`, 'ok');
-          log(`  length=${res.data.length} bytes`);
+          const pk = $('server').value;
+          const c = contacts.find((x) => x.publicKey === pk);
+          const res = await client.requestStatus(pk, { timeoutMs: 40000 });
+          log(`=== STATUS RESPONSE raw=${hex(res.data)} (${res.data.length} bytes)`, 'ok');
+          const s = parseNodeStatus(res.data, c?.type ?? AdvType.REPEATER);
+          log(`  ${s.kind}: batt=${s.batteryMillivolts}mV uptime=${s.uptimeSeconds}s noise=${s.noiseFloor} lastRSSI=${s.lastRssi} lastSNR=${s.lastSnr}dB queue=${s.txQueueLength}`);
+          log(`  packets: recv=${s.packetsReceived} sent=${s.packetsSent} flood(s/r)=${s.sentFlood}/${s.recvFlood} direct(s/r)=${s.sentDirect}/${s.recvDirect} airtime tx=${s.txAirtimeSeconds}s`);
+          if (s.kind === 'repeater') log(`  rxAir=${s.rxAirtimeSeconds}s recvErrors=${s.recvErrors} dups(d/f)=${s.directDups}/${s.floodDups}`);
+          else log(`  posted=${s.posted} postPushes=${s.postPushes} dups(d/f)=${s.directDups}/${s.floodDups}`);
         } catch (e) { log(`status error: ${e.message}`, 'err'); }
       });
 
