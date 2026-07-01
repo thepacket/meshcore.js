@@ -107,6 +107,34 @@ export interface BatteryAndStorage {
   storageTotalKb: number;
 }
 
+/** PUSH.LOGIN_SUCCESS — a repeater/room-server login was accepted. */
+export interface LoginResult {
+  /** 6-byte public-key prefix of the server (hex). */
+  pubKeyPrefix: string;
+  /** Server-assigned permissions byte (e.g. admin bit). */
+  permissions: number;
+  /** New-protocol logins only: server timestamp. */
+  serverTimestamp?: number;
+  /** v7+ ACL permissions byte. */
+  aclPermissions?: number;
+  /** Server firmware version level. */
+  firmwareVerLevel?: number;
+}
+
+/** PUSH.STATUS_RESPONSE / TELEMETRY_RESPONSE — payload is a raw device blob. */
+export interface NodeResponse {
+  /** 6-byte public-key prefix of the responder (hex). */
+  pubKeyPrefix: string;
+  /** Raw response payload (status or telemetry blob; parse per your app). */
+  data: Uint8Array;
+}
+
+/** PUSH.BINARY_RESPONSE — reply to a binary request, matched by tag. */
+export interface BinaryResponse {
+  tag: number;
+  data: Uint8Array;
+}
+
 /** A generic error reply (RESP.ERR). */
 export interface ErrorResult {
   code: number;
@@ -134,6 +162,11 @@ export type DecodedFrame =
   | { type: 'newAdvert'; contact: Contact }
   | { type: 'pathUpdated'; publicKey: string }
   | { type: 'sendConfirmed'; confirmed: SendConfirmed }
+  | { type: 'loginSuccess'; result: LoginResult }
+  | { type: 'loginFail'; pubKeyPrefix: string }
+  | { type: 'statusResponse'; response: NodeResponse }
+  | { type: 'telemetryResponse'; response: NodeResponse }
+  | { type: 'binaryResponse'; response: BinaryResponse }
   | { type: 'messageWaiting' }
   | { type: 'contactDeleted'; publicKey: string }
   | { type: 'contactsFull' }

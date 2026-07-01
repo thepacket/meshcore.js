@@ -7,18 +7,28 @@ import { Emitter } from './emitter.js';
 import * as encode from './protocol/encode.js';
 import type {
   BatteryAndStorage,
+  BinaryResponse,
   Channel,
   Contact,
   CurrentTime,
   DecodedFrame,
   DeviceInfo,
   InboundMessage,
+  LoginResult,
+  NodeResponse,
   SelfInfo,
   SendConfirmed,
   SendResult,
 } from './protocol/types.js';
 import type { ContactInput, RadioParams } from './protocol/encode.js';
 import { ERR_CODE_NAMES } from './protocol/constants.js';
+import { fromHex, toHex } from './protocol/hex.js';
+
+/** 6-byte public-key prefix (hex) as used to correlate push responses. */
+function pubKeyPrefixHex(key: string | Uint8Array): string {
+  const bytes = typeof key === 'string' ? fromHex(key) : key;
+  return toHex(bytes.subarray(0, 6));
+}
 import type { MeshCoreCrypto } from './crypto/crypto.js';
 
 /** Error raised when the device replies with RESP.ERR. */
@@ -38,6 +48,11 @@ export type MeshCoreEvents = {
   newContact: [Contact];
   pathUpdated: [string];
   sendConfirmed: [SendConfirmed];
+  login: [LoginResult];
+  loginFailed: [string]; // server pubkey prefix
+  statusResponse: [NodeResponse];
+  telemetryResponse: [NodeResponse];
+  binaryResponse: [BinaryResponse];
   contactDeleted: [string];
   contactsFull: [];
   disconnect: [];
@@ -233,6 +248,92 @@ export class MeshCore {
     expectOk(await this.connection.request(encode.setChannel(index, name, secret)));
   }
 
+  // -- login / status / telemetry ----------------------------------------
+
+  /**
+   * Log in to a repeater or room server. Sends the request, waits for the
+   * device to confirm it queued, then resolves when the correlated
+   * LOGIN_SUCCESS push arrives (rejects on LOGIN_FAIL or timeout).
+   */
+  async login(
+    publicKey: string | Uint8Array,
+    password: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<LoginResult> {
+    const prefix = pubKeyPrefixHex(publicKey);
+    const timeoutMs = options.timeoutMs ?? 30_000;
+    const pushed = this.waitForPush(
+      (f) =>
+        (f.type === 'loginSuccess' && f.result.pubKeyPrefix === prefix) ||
+        (f.type === 'loginFail' && f.pubKeyPrefix === prefix),
+      timeoutMs,
+    );
+    expectOk(await this.connection.request(encode.sendLogin(publicKey, password)));
+    const f = await pushed;
+    if (f.type === 'loginFail') throw new Error(`MeshCore: login rejected by ${prefix}`);
+    if (f.type !== 'loginSuccess') throw new Error(`unexpected ${f.type}`);
+    return f.result;
+  }
+
+  /** End a repeater/room-server session. */
+  async logout(publicKey: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.logout(publicKey)));
+  }
+
+  /** True if the device currently has an active session to the node. */
+  async hasConnection(publicKey: string | Uint8Array): Promise<boolean> {
+    const f = await this.connection.request(encode.hasConnection(publicKey));
+    if (f.type === 'ok') return true;
+    if (f.type === 'error') return false;
+    throw new Error(`unexpected ${f.type}`);
+  }
+
+  /** Request status from a repeater/sensor node; resolves with the raw blob. */
+  async requestStatus(
+    publicKey: string | Uint8Array,
+    options: { timeoutMs?: number } = {},
+  ): Promise<NodeResponse> {
+    const prefix = pubKeyPrefixHex(publicKey);
+    const pushed = this.waitForPush(
+      (f) => f.type === 'statusResponse' && f.response.pubKeyPrefix === prefix,
+      options.timeoutMs ?? 30_000,
+    );
+    expectOk(await this.connection.request(encode.sendStatusReq(publicKey)));
+    const f = await pushed;
+    if (f.type !== 'statusResponse') throw new Error(`unexpected ${f.type}`);
+    return f.response;
+  }
+
+  /** Request telemetry from a remote node; resolves with the raw blob. */
+  async requestTelemetry(
+    publicKey: string | Uint8Array,
+    options: { timeoutMs?: number } = {},
+  ): Promise<NodeResponse> {
+    const prefix = pubKeyPrefixHex(publicKey);
+    const pushed = this.waitForPush(
+      (f) => f.type === 'telemetryResponse' && f.response.pubKeyPrefix === prefix,
+      options.timeoutMs ?? 30_000,
+    );
+    expectOk(await this.connection.request(encode.sendTelemetryReq(publicKey)));
+    const f = await pushed;
+    if (f.type !== 'telemetryResponse') throw new Error(`unexpected ${f.type}`);
+    return f.response;
+  }
+
+  /** Read this device's own telemetry (replies immediately with a push). */
+  async getSelfTelemetry(options: { timeoutMs?: number } = {}): Promise<NodeResponse> {
+    if (!this.selfInfo) throw new Error('call connect() first');
+    const prefix = this.selfInfo.publicKey.slice(0, 12); // 6-byte prefix hex
+    const pushed = this.waitForPush(
+      (f) => f.type === 'telemetryResponse' && f.response.pubKeyPrefix === prefix,
+      options.timeoutMs ?? 10_000,
+    );
+    await this.connection.send(encode.sendSelfTelemetryReq());
+    const f = await pushed;
+    if (f.type !== 'telemetryResponse') throw new Error(`unexpected ${f.type}`);
+    return f.response;
+  }
+
   // -- device / advertising ----------------------------------------------
 
   /** Read the device clock (epoch seconds). */
@@ -286,6 +387,26 @@ export class MeshCore {
 
   // -- internals ----------------------------------------------------------
 
+  /** Resolve when a push frame matching `predicate` arrives (or reject on timeout). */
+  private waitForPush(
+    predicate: (f: DecodedFrame) => boolean,
+    timeoutMs: number,
+  ): Promise<DecodedFrame> {
+    return new Promise<DecodedFrame>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        off();
+        reject(new Error('MeshCore: timed out waiting for response'));
+      }, timeoutMs);
+      const off = this.connection.on('push', (f) => {
+        if (predicate(f)) {
+          clearTimeout(timer);
+          off();
+          resolve(f);
+        }
+      });
+    });
+  }
+
   private routePush(frame: DecodedFrame): void {
     switch (frame.type) {
       case 'advert':
@@ -299,6 +420,21 @@ export class MeshCore {
         break;
       case 'sendConfirmed':
         this.emitter.emit('sendConfirmed', frame.confirmed);
+        break;
+      case 'loginSuccess':
+        this.emitter.emit('login', frame.result);
+        break;
+      case 'loginFail':
+        this.emitter.emit('loginFailed', frame.pubKeyPrefix);
+        break;
+      case 'statusResponse':
+        this.emitter.emit('statusResponse', frame.response);
+        break;
+      case 'telemetryResponse':
+        this.emitter.emit('telemetryResponse', frame.response);
+        break;
+      case 'binaryResponse':
+        this.emitter.emit('binaryResponse', frame.response);
         break;
       case 'contactDeleted':
         this.emitter.emit('contactDeleted', frame.publicKey);

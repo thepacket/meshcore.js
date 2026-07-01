@@ -131,15 +131,25 @@ Implemented commands:
 - **Contacts:** `GET_CONTACTS`, `GET_CONTACT_BY_KEY`, `ADD_UPDATE_CONTACT`, `REMOVE_CONTACT`,
   `RESET_PATH`, `SHARE_CONTACT`
 - **Channels:** `GET_CHANNEL`, `SET_CHANNEL` (+ base64 PSK helpers, `PUBLIC_CHANNEL`)
+- **Repeater/room:** `SEND_LOGIN`, `LOGOUT`, `HAS_CONNECTION`, `SEND_STATUS_REQ`,
+  `SEND_TELEMETRY_REQ` (remote + self) — async request→push responses awaited for you
 - **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,
   `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
 
 Handled pushes: `ADVERT`, `NEW_ADVERT`, `PATH_UPDATED`, `SEND_CONFIRMED`, `MSG_WAITING`
-(auto-drains the offline queue), `CONTACT_DELETED`, `CONTACTS_FULL`.
+(auto-drains the offline queue), `LOGIN_SUCCESS`/`LOGIN_FAIL`, `STATUS_RESPONSE`,
+`TELEMETRY_RESPONSE`, `BINARY_RESPONSE`, `CONTACT_DELETED`, `CONTACTS_FULL`.
 
-Not yet modelled frames decode to `{ type: 'raw', code, payload }` rather than failing, so
-newer firmware won't break the client. Telemetry, login/repeater, traces, raw/binary/control
-data, and Node transports are planned.
+```ts
+// repeater login + status (the correlated push is awaited automatically)
+const session = await client.login(repeaterPubKey, 'password');
+const status = await client.requestStatus(repeaterPubKey); // -> { pubKeyPrefix, data }
+```
+
+Status/telemetry payloads are returned as raw bytes (`data`) — parsing the device blob format
+is left to the application for now. Not-yet-modelled frames decode to
+`{ type: 'raw', code, payload }` rather than failing, so newer firmware won't break the client.
+Path traces and raw/binary/control data are planned.
 
 ## Crypto fidelity
 

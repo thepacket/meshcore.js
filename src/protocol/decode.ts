@@ -18,7 +18,7 @@ import {
   PUBKEY_PREFIX_SIZE,
 } from './constants.js';
 import { toHex } from './hex.js';
-import type { Contact, DecodedFrame, InboundMessage } from './types.js';
+import type { Contact, DecodedFrame, InboundMessage, LoginResult } from './types.js';
 
 /** True if `code` denotes an unsolicited push notification. */
 export function isPushCode(code: number): boolean {
@@ -239,6 +239,39 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
       return {
         type: 'sendConfirmed',
         confirmed: { ackTag: r.u32(), roundTripMillis: r.u32() },
+      };
+    case Push.LOGIN_SUCCESS: {
+      const permissions = r.u8();
+      const pubKeyPrefix = r.hex(PUBKEY_PREFIX_SIZE);
+      const result: LoginResult = { pubKeyPrefix, permissions };
+      // New-protocol logins append: timestamp(u32), acl(u8), fwLevel(u8).
+      if (r.remaining >= 6) {
+        result.serverTimestamp = r.u32();
+        result.aclPermissions = r.u8();
+        result.firmwareVerLevel = r.u8();
+      }
+      return { type: 'loginSuccess', result };
+    }
+    case Push.LOGIN_FAIL:
+      r.u8(); // reserved
+      return { type: 'loginFail', pubKeyPrefix: r.hex(PUBKEY_PREFIX_SIZE) };
+    case Push.STATUS_RESPONSE:
+      r.u8(); // reserved
+      return {
+        type: 'statusResponse',
+        response: { pubKeyPrefix: r.hex(PUBKEY_PREFIX_SIZE), data: r.rest() },
+      };
+    case Push.TELEMETRY_RESPONSE:
+      r.u8(); // reserved
+      return {
+        type: 'telemetryResponse',
+        response: { pubKeyPrefix: r.hex(PUBKEY_PREFIX_SIZE), data: r.rest() },
+      };
+    case Push.BINARY_RESPONSE:
+      r.u8(); // reserved
+      return {
+        type: 'binaryResponse',
+        response: { tag: r.u32(), data: r.rest() },
       };
     case Push.MSG_WAITING:
       return { type: 'messageWaiting' };

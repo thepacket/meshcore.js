@@ -257,3 +257,43 @@ export function setRadioParams(p: RadioParams): Uint8Array {
 export function setRadioTxPower(dbm: number): Uint8Array {
   return new ByteWriter().u8(Cmd.SET_RADIO_TX_POWER).i8(dbm).toBytes();
 }
+
+// -- login / status / telemetry -----------------------------------------
+
+/** CMD.SEND_LOGIN — authenticate to a repeater/room server. */
+export function sendLogin(publicKey: string | Uint8Array, password: string): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SEND_LOGIN)
+    .bytes(fullPubKey(publicKey))
+    .str(password)
+    .toBytes();
+}
+
+/** CMD.LOGOUT — end a repeater/room-server session. */
+export function logout(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.LOGOUT).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+/** CMD.SEND_STATUS_REQ — request status from a repeater/sensor node. */
+export function sendStatusReq(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.SEND_STATUS_REQ).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+/** CMD.SEND_TELEMETRY_REQ for a remote node (3 reserved bytes then the key). */
+export function sendTelemetryReq(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SEND_TELEMETRY_REQ)
+    .bytes(new Uint8Array(3)) // reserved
+    .bytes(fullPubKey(publicKey))
+    .toBytes();
+}
+
+/** CMD.SEND_TELEMETRY_REQ for THIS device (len == 4 selects self telemetry). */
+export function sendSelfTelemetryReq(): Uint8Array {
+  return new ByteWriter().u8(Cmd.SEND_TELEMETRY_REQ).bytes(new Uint8Array(3)).toBytes();
+}
+
+/** CMD.HAS_CONNECTION — check for an active session to a node. */
+export function hasConnection(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.HAS_CONNECTION).bytes(fullPubKey(publicKey)).toBytes();
+}
