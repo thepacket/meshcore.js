@@ -18,6 +18,12 @@ export const NUS_TX_CHARACTERISTIC = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 export interface WebBluetoothOptions {
   /** Filter advertised device names by prefix (e.g. "MeshCore"). */
   namePrefix?: string;
+  /**
+   * Show every nearby device in the chooser instead of filtering by the NUS
+   * service. Useful as a fallback when a platform doesn't surface the service
+   * UUID in the advertisement (the NUS service is still requested for use).
+   */
+  acceptAllDevices?: boolean;
   /** Provide an already-selected device (skip the chooser). */
   device?: BluetoothDevice;
 }
@@ -52,13 +58,20 @@ export class WebBluetoothTransport implements Transport {
       if (!bluetooth) {
         throw new Error('Web Bluetooth is not available in this environment');
       }
-      const filters: BluetoothLEScanFilter[] = this.options.namePrefix
-        ? [{ namePrefix: this.options.namePrefix }]
-        : [{ services: [NUS_SERVICE] }];
-      this.device = await bluetooth.requestDevice({
-        filters,
-        optionalServices: [NUS_SERVICE],
-      });
+      if (this.options.acceptAllDevices) {
+        this.device = await bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [NUS_SERVICE],
+        });
+      } else {
+        const filters: BluetoothLEScanFilter[] = this.options.namePrefix
+          ? [{ namePrefix: this.options.namePrefix }]
+          : [{ services: [NUS_SERVICE] }];
+        this.device = await bluetooth.requestDevice({
+          filters,
+          optionalServices: [NUS_SERVICE],
+        });
+      }
     }
 
     const gatt = this.device.gatt;

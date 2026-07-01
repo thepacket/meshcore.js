@@ -24,8 +24,11 @@
     <p class="muted">Chrome/Edge over https or localhost. Connect a MeshCore Companion, then run the
       baseline. Frame sizes are logged to detect BLE fragmentation.</p>
 
+    <div id="preflight" class="muted">checking Bluetooth support…</div>
+
     <div class="row">
       <button id="connect">Connect &amp; run baseline</button>
+      <button id="connect-all">Connect (show all devices)</button>
       <button id="disconnect" disabled>Disconnect</button>
       <button id="copy">Copy full log</button>
       <span id="status" class="muted">disconnected</span>
@@ -106,12 +109,44 @@
         $('server').innerHTML = servers.map(opt).join('');
       }
 
-      $('connect').addEventListener('click', async () => {
+      // Preflight: report exactly what this browser exposes, so a failure to
+      // list devices can be diagnosed without guessing.
+      async function preflight() {
+        const secure = window.isSecureContext;
+        const hasBt = 'bluetooth' in navigator;
+        let avail = 'n/a';
+        try {
+          if (hasBt && navigator.bluetooth.getAvailability) {
+            avail = await navigator.bluetooth.getAvailability();
+          }
+        } catch (e) { avail = 'error: ' + e.message; }
+
+        let verdict, cls;
+        if (!hasBt) {
+          verdict = 'Web Bluetooth is NOT available. Use Chrome or Edge on desktop/Android — Safari and Firefox do not support it.';
+          cls = 'err';
+        } else if (!secure) {
+          verdict = 'Not a secure context. Use https or http://localhost.';
+          cls = 'err';
+        } else if (avail === false) {
+          verdict = 'Bluetooth adapter reports unavailable. On macOS: System Settings → Privacy & Security → Bluetooth → enable your browser, then fully quit and reopen it. Also confirm Bluetooth is on.';
+          cls = 'warn';
+        } else {
+          verdict = 'Bluetooth available. Click Connect. If the chooser is empty, the device is likely connected to another host (e.g. your phone) — disconnect it there so it advertises; or try "Connect (show all devices)".';
+          cls = 'ok';
+        }
+        $('preflight').innerHTML =
+          `<b>Preflight:</b> secureContext=${secure} · navigator.bluetooth=${hasBt} · getAvailability=${avail}<br>` +
+          `<span class="${cls}">${verdict}</span><br><span class="muted">${navigator.userAgent}</span>`;
+        log(`preflight: secureContext=${secure} bluetooth=${hasBt} getAvailability=${avail}`);
+        log(`preflight: ${navigator.userAgent}`);
+      }
+      preflight();
+
+      async function connectAndRun(transportOptions) {
         try {
           maxFrame = 0;
-          // Filter by the NUS service UUID (name-independent; matches how the
-          // official app scans and is more reliable on macOS).
-          transport = new WebBluetoothTransport();
+          transport = new WebBluetoothTransport(transportOptions);
           instrument(transport);
           client = new MeshCore(transport);
           client.on('message', (m) => log(`EVENT message from ${m.senderPrefix ?? 'ch'+m.channelIdx}: "${m.text}" snr=${m.snr}`, 'ok'));
@@ -163,7 +198,10 @@
         } catch (e) {
           log(`ERROR: ${e.message}`, 'err');
         }
-      });
+      }
+
+      $('connect').addEventListener('click', () => connectAndRun({}));
+      $('connect-all').addEventListener('click', () => connectAndRun({ acceptAllDevices: true }));
 
       $('send').addEventListener('click', async () => {
         try {
@@ -215,6 +253,7 @@
 
       function setConnected(c) {
         $('connect').disabled = c;
+        $('connect-all').disabled = c;
         for (const id of ['disconnect', 'send', 'login', 'status-req', 'trace', 'telemetry']) $(id).disabled = !c;
         $('status').textContent = c ? 'connected' : 'disconnected';
       }
