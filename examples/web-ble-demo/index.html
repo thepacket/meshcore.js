@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>meshcore.js — Web Bluetooth demo</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 820px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      h1 { font-size: 1.4rem; }
+      button { padding: 0.4rem 0.8rem; font-size: 1rem; cursor: pointer; }
+      input { padding: 0.35rem; font-size: 1rem; }
+      fieldset { margin: 1rem 0; border: 1px solid #8884; border-radius: 8px; }
+      #log {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        background: #8881;
+        border-radius: 8px;
+        padding: 0.75rem;
+        height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+      .muted { opacity: 0.7; }
+      table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+      td, th { text-align: left; padding: 0.25rem 0.5rem; border-bottom: 1px solid #8883; }
+    </style>
+  </head>
+  <body>
+    <h1>meshcore.js — Web Bluetooth demo</h1>
+    <p class="muted">
+      Connects to a MeshCore companion device over BLE (Nordic UART Service).
+      Requires Chrome/Edge over <code>https</code> or <code>localhost</code>.
+    </p>
+
+    <div class="row">
+      <button id="connect">Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <span id="status" class="muted">disconnected</span>
+    </div>
+
+    <fieldset>
+      <legend>Device</legend>
+      <div id="device" class="muted">—</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contacts</legend>
+      <button id="refresh-contacts" disabled>Refresh</button>
+      <table id="contacts"><tbody></tbody></table>
+    </fieldset>
+
+    <fieldset>
+      <legend>Send direct message</legend>
+      <div class="row">
+        <input id="to" placeholder="recipient public key (hex)" size="40" />
+        <input id="text" placeholder="message" size="24" />
+        <button id="send" disabled>Send</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Log</legend>
+      <div id="log"></div>
+    </fieldset>
+
+    <script type="module">
+      import { MeshCore, WebBluetoothTransport } from '../../dist/index.js';
+
+      const $ = (id) => document.getElementById(id);
+      const logEl = $('log');
+      const log = (msg) => {
+        logEl.textContent += `${new Date().toLocaleTimeString()}  ${msg}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      let client = null;
+
+      function setConnected(connected) {
+        $('connect').disabled = connected;
+        $('disconnect').disabled = !connected;
+        $('refresh-contacts').disabled = !connected;
+        $('send').disabled = !connected;
+        $('status').textContent = connected ? 'connected' : 'disconnected';
+      }
+
+      $('connect').addEventListener('click', async () => {
+        try {
+          const transport = new WebBluetoothTransport({ namePrefix: 'MeshCore' });
+          client = new MeshCore(transport);
+
+          client.on('message', (m) =>
+            log(`MSG  ${m.kind} from ${m.senderPrefix ?? 'ch' + m.channelIdx}: ${m.text}`),
+          );
+          client.on('advert', (pk) => log(`ADVERT  ${pk.slice(0, 12)}…`));
+          client.on('sendConfirmed', (c) =>
+            log(`ACK  tag=${c.ackTag.toString(16)} rtt=${c.roundTripMillis}ms`),
+          );
+          client.on('disconnect', () => {
+            log('disconnected');
+            setConnected(false);
+          });
+
+          log('connecting…');
+          const { deviceInfo, selfInfo } = await client.connect();
+          setConnected(true);
+          $('device').textContent =
+            `${selfInfo.name} — ${deviceInfo.manufacturer} ${deviceInfo.firmwareVersion} · ` +
+            `${selfInfo.freq} MHz SF${selfInfo.spreadingFactor} · ${selfInfo.publicKey.slice(0, 16)}…`;
+          log(`connected as "${selfInfo.name}"`);
+        } catch (err) {
+          log(`ERROR  ${err.message}`);
+        }
+      });
+
+      $('disconnect').addEventListener('click', async () => {
+        await client?.disconnect();
+        setConnected(false);
+      });
+
+      $('refresh-contacts').addEventListener('click', async () => {
+        try {
+          const contacts = await client.getContacts();
+          const rows = contacts
+            .map(
+              (c) =>
+                `<tr><td>${c.name}</td><td class="muted">${c.publicKey.slice(0, 16)}…</td>` +
+                `<td>${['none', 'chat', 'repeater', 'room', 'sensor'][c.type] ?? c.type}</td></tr>`,
+            )
+            .join('');
+          $('contacts').querySelector('tbody').innerHTML = rows;
+          log(`loaded ${contacts.length} contact(s)`);
+        } catch (err) {
+          log(`ERROR  ${err.message}`);
+        }
+      });
+
+      $('send').addEventListener('click', async () => {
+        try {
+          const to = $('to').value.trim();
+          const text = $('text').value;
+          const result = await client.sendTextMessage(to, text);
+          log(`sent (${result.flood ? 'flood' : 'direct'}), awaiting ack tag=${result.expectedAck.toString(16)}`);
+          $('text').value = '';
+        } catch (err) {
+          log(`ERROR  ${err.message}`);
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "name": "meshcore.js",
+  "version": "0.1.0",
+  "description": "Browser client for MeshCore devices over the Companion Radio Protocol, with upstream crypto compiled to WASM.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "meshcore",
+    "lora",
+    "mesh",
+    "web-bluetooth",
+    "wasm"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./wasm": {
+      "import": "./dist/wasm/meshcore_crypto.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "wasm",
+    "vendor"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:wasm": "bash wasm/build.sh",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/web-bluetooth": "^0.0.20",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
