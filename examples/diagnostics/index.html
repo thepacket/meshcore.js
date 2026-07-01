@@ -45,6 +45,10 @@
         <button id="send" disabled>Send</button>
       </div>
       <div class="row">
+        <button id="synctime" disabled>Sync device clock</button>
+        <span class="muted">(do this before login if the device clock is off)</span>
+      </div>
+      <div class="row">
         <label>Login</label>
         <select id="server"></select>
         <input id="password" placeholder="password" size="14" />
@@ -154,6 +158,8 @@
           client.on('message', (m) => log(`EVENT message from ${m.senderPrefix ?? 'ch'+m.channelIdx}: "${m.text}" snr=${m.snr}`, 'ok'));
           client.on('sendConfirmed', (c) => log(`EVENT ack tag=${c.ackTag.toString(16)} rtt=${c.roundTripMillis}ms`, 'ok'));
           client.on('advert', (pk) => log(`EVENT advert ${pk.slice(0,12)}…`));
+          client.on('login', (r) => log(`EVENT login OK from ${r.pubKeyPrefix} perms=${r.permissions} fw=${r.firmwareVerLevel}`, 'ok'));
+          client.on('loginFailed', (pfx) => log(`EVENT login FAILED from ${pfx} (bad password, or device clock out of sync)`, 'err'));
           client.on('disconnect', () => { log('disconnected'); setConnected(false); });
 
           log('connecting…');
@@ -216,9 +222,19 @@
         } catch (e) { log(`send error: ${e.message}`, 'err'); }
       });
 
-      $('login').addEventListener('click', async () => {
+      $('synctime').addEventListener('click', async () => {
         try {
-          const res = await client.login($('server').value, $('password').value, { timeoutMs: 15000 });
+          const secs = Math.floor(Date.now() / 1000);
+          await client.setDeviceTime(secs);
+          log(`device clock set to ${new Date(secs * 1000).toISOString()}`, 'ok');
+        } catch (e) { log(`set-time error: ${e.message}`, 'err'); }
+      });
+
+      $('login').addEventListener('click', async () => {
+        const name = $('server').selectedOptions[0]?.textContent ?? $('server').value;
+        log(`logging in to ${name}… (LoRa round-trip can take 10-30s)`);
+        try {
+          const res = await client.login($('server').value, $('password').value, { timeoutMs: 40000 });
           log(`LOGIN OK perms=${res.permissions} acl=${res.aclPermissions} fw=${res.firmwareVerLevel} ts=${res.serverTimestamp}`, 'ok');
         } catch (e) { log(`login error: ${e.message}`, 'err'); }
       });
@@ -259,7 +275,7 @@
       function setConnected(c) {
         $('connect').disabled = c;
         $('connect-all').disabled = c;
-        for (const id of ['disconnect', 'send', 'login', 'status-req', 'trace', 'telemetry']) $(id).disabled = !c;
+        for (const id of ['disconnect', 'send', 'synctime', 'login', 'status-req', 'trace', 'telemetry']) $(id).disabled = !c;
         $('status').textContent = c ? 'connected' : 'disconnected';
       }
     </script>
