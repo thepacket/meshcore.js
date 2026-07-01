@@ -25,7 +25,8 @@ byte-for-byte compatible with the firmware.
 │   constants · reader/writer│   (ed25519 + aes + sha256)    │
 ├───────────────────────────┴─────────────────────────────┤
 │  Transport (interface)                                    │
-│   WebBluetoothTransport  (Nordic UART Service)            │
+│   WebBluetoothTransport  (BLE, Nordic UART Service)       │
+│   NodeSerialTransport     (USB serial, < / > framing)     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -73,6 +74,29 @@ console.log(`connected to ${selfInfo.name} (${deviceInfo.firmwareVersion})`);
 const contacts = await client.getContacts();
 await client.sendTextMessage(contacts[0].publicKey, 'hello from the browser');
 ```
+
+### Node.js (USB serial)
+
+For CLI/desktop/backend use, connect over USB serial instead of BLE. The `serialport`
+package is an optional dependency — install it only if you need this transport:
+
+```bash
+npm i serialport
+```
+
+```ts
+import { MeshCore, NodeSerialTransport } from 'meshcore.js';
+
+const ports = await NodeSerialTransport.list();        // discover devices
+const client = new MeshCore(new NodeSerialTransport({ path: ports[0].path }));
+
+const { selfInfo } = await client.connect();
+console.log('connected to', selfInfo.name);
+```
+
+The serial transport implements the length-prefixed USB framing (`<`/`>` + 16-bit length);
+BLE uses one-frame-per-characteristic. Both sit behind the same `Transport` interface, so the
+client and protocol code are identical. See `examples/node-cli/connect.mjs`.
 
 ### Using the crypto directly
 

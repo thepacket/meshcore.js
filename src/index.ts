@@ -14,6 +14,18 @@ export {
   NUS_TX_CHARACTERISTIC,
   type WebBluetoothOptions,
 } from './transport/web-bluetooth.js';
+export {
+  NodeSerialTransport,
+  type NodeSerialOptions,
+  type SerialPortLike,
+} from './transport/node-serial.js';
+export {
+  UsbFrameParser,
+  encodeUsbFrame,
+  FRAME_TO_DEVICE,
+  FRAME_FROM_DEVICE,
+  MAX_USB_FRAME_SIZE,
+} from './transport/usb-framing.js';
 
 export * from './protocol/index.js';
 
