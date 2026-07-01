@@ -13,6 +13,8 @@ import {
   PUB_KEY_SIZE,
   MAX_PATH_SIZE,
   CONTACT_NAME_SIZE,
+  CHANNEL_NAME_SIZE,
+  CHANNEL_SECRET_SIZE,
   PUBKEY_PREFIX_SIZE,
 } from './constants.js';
 import { toHex } from './hex.js';
@@ -196,6 +198,26 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
 
     case Resp.CURR_TIME:
       return { type: 'currentTime', time: { epochSeconds: r.u32() } };
+
+    case Resp.CHANNEL_INFO:
+      return {
+        type: 'channelInfo',
+        channel: {
+          index: r.u8(),
+          name: r.fixedStr(CHANNEL_NAME_SIZE),
+          secret: r.hex(CHANNEL_SECRET_SIZE),
+        },
+      };
+
+    case Resp.BATT_AND_STORAGE:
+      return {
+        type: 'batteryAndStorage',
+        info: {
+          batteryMillivolts: r.u16(),
+          storageUsedKb: r.u32(),
+          storageTotalKb: r.u32(),
+        },
+      };
 
     case Resp.CONTACT_MSG_RECV_V3:
       return { type: 'message', message: decodeContactMessage(r, true) };

@@ -166,6 +166,9 @@ export const PUBLIC_GROUP_PSK = 'izOH6cXN6mrJ5e26oRXNcg==';
 export const PUB_KEY_SIZE = 32;
 export const MAX_PATH_SIZE = 64;
 export const CONTACT_NAME_SIZE = 32;
+export const CHANNEL_NAME_SIZE = 32;
+/** Group-channel shared secret: 128-bit (only size the firmware supports). */
+export const CHANNEL_SECRET_SIZE = 16;
 /** Direct messages/adverts carry a 6-byte public-key prefix on the wire. */
 export const PUBKEY_PREFIX_SIZE = 6;
 /** Sentinel path_len meaning "unknown / flood". */

@@ -18,6 +18,12 @@ export {
 export * from './protocol/index.js';
 
 export {
+  channelSecretFromPsk,
+  pskFromChannelSecret,
+  PUBLIC_CHANNEL,
+} from './channel.js';
+
+export {
   MeshCoreCrypto,
   loadCryptoWasm,
   type CryptoWasm,

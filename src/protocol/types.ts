@@ -92,6 +92,21 @@ export interface CurrentTime {
   epochSeconds: number;
 }
 
+/** RESP.CHANNEL_INFO — reply to CMD.GET_CHANNEL. */
+export interface Channel {
+  index: number;
+  name: string;
+  /** 16-byte shared secret as hex. */
+  secret: string;
+}
+
+/** RESP.BATT_AND_STORAGE — reply to CMD.GET_BATT_AND_STORAGE. */
+export interface BatteryAndStorage {
+  batteryMillivolts: number;
+  storageUsedKb: number;
+  storageTotalKb: number;
+}
+
 /** A generic error reply (RESP.ERR). */
 export interface ErrorResult {
   code: number;
@@ -111,6 +126,8 @@ export type DecodedFrame =
   | { type: 'endOfContacts'; mostRecentLastMod: number }
   | { type: 'sent'; result: SendResult }
   | { type: 'currentTime'; time: CurrentTime }
+  | { type: 'channelInfo'; channel: Channel }
+  | { type: 'batteryAndStorage'; info: BatteryAndStorage }
   | { type: 'message'; message: InboundMessage }
   // pushes
   | { type: 'advert'; publicKey: string }

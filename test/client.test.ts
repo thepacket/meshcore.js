@@ -93,9 +93,34 @@ class FakeDevice implements Transport {
         this.push(next ?? new Uint8Array([Resp.NO_MORE_MESSAGES]));
         break;
       }
+      case Cmd.GET_CHANNEL:
+        if (frame[1] === 0) {
+          this.push(
+            new ByteWriter()
+              .u8(Resp.CHANNEL_INFO)
+              .u8(0)
+              .fixedStr('public', 32)
+              .bytes(fromHex('000102030405060708090a0b0c0d0e0f'))
+              .toBytes(),
+          );
+        } else {
+          this.push(new Uint8Array([Resp.ERR, 2])); // NOT_FOUND
+        }
+        break;
+      case Cmd.GET_CONTACT_BY_KEY:
+        this.push(new Uint8Array([Resp.ERR, 2])); // NOT_FOUND -> null
+        break;
+      case Cmd.GET_BATT_AND_STORAGE:
+        this.push(new ByteWriter().u8(Resp.BATT_AND_STORAGE).u16(3700).u32(128).u32(1024).toBytes());
+        break;
       case Cmd.SEND_SELF_ADVERT:
       case Cmd.SET_DEVICE_TIME:
+      case Cmd.SET_CHANNEL:
+      case Cmd.SET_RADIO_PARAMS:
         this.push(new Uint8Array([Resp.OK]));
+        break;
+      case Cmd.REBOOT:
+        // device reboots without replying
         break;
       default:
         this.push(new Uint8Array([Resp.ERR, 1]));
@@ -192,6 +217,31 @@ describe('MeshCore client', () => {
     await client.connect();
     // channel message handler in the fake returns ERR
     await expect(client.sendChannelMessage(9, 'x')).rejects.toThrow(/UNSUPPORTED_CMD/);
+  });
+
+  it('reads a channel and returns null for empty slots', async () => {
+    await client.connect();
+    const ch = await client.getChannel(0);
+    expect(ch?.name).toBe('public');
+    expect(ch?.secret).toBe('000102030405060708090a0b0c0d0e0f');
+    expect(await client.getChannel(3)).toBeNull();
+  });
+
+  it('getContactByKey returns null on NOT_FOUND', async () => {
+    await client.connect();
+    expect(await client.getContactByKey(PUB)).toBeNull();
+  });
+
+  it('reads battery and storage', async () => {
+    await client.connect();
+    const b = await client.getBatteryAndStorage();
+    expect(b.batteryMillivolts).toBe(3700);
+    expect(b.storageTotalKb).toBe(1024);
+  });
+
+  it('reboot is fire-and-forget (no reply)', async () => {
+    await client.connect();
+    await expect(client.reboot()).resolves.toBeUndefined();
   });
 
   it('emits disconnect', async () => {

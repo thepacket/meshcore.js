@@ -100,16 +100,22 @@ Click **Connect** and pick your MeshCore device.
 
 ## Protocol coverage
 
-Implemented commands: `DEVICE_QUERY`, `APP_START`, `GET_CONTACTS`, `SEND_TXT_MSG`,
-`SEND_CHANNEL_TXT_MSG`, `SYNC_NEXT_MESSAGE`, `GET_DEVICE_TIME`, `SET_DEVICE_TIME`,
-`SEND_SELF_ADVERT`, `SET_ADVERT_NAME`.
+Implemented commands:
+
+- **Handshake:** `DEVICE_QUERY`, `APP_START`
+- **Messaging:** `SEND_TXT_MSG`, `SEND_CHANNEL_TXT_MSG`, `SYNC_NEXT_MESSAGE`
+- **Contacts:** `GET_CONTACTS`, `GET_CONTACT_BY_KEY`, `ADD_UPDATE_CONTACT`, `REMOVE_CONTACT`,
+  `RESET_PATH`, `SHARE_CONTACT`
+- **Channels:** `GET_CHANNEL`, `SET_CHANNEL` (+ base64 PSK helpers, `PUBLIC_CHANNEL`)
+- **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,
+  `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
 
 Handled pushes: `ADVERT`, `NEW_ADVERT`, `PATH_UPDATED`, `SEND_CONFIRMED`, `MSG_WAITING`
 (auto-drains the offline queue), `CONTACT_DELETED`, `CONTACTS_FULL`.
 
 Not yet modelled frames decode to `{ type: 'raw', code, payload }` rather than failing, so
-newer firmware won't break the client. Channels, telemetry, login/repeater, traces, raw/
-binary/control data, and full radio configuration are planned.
+newer firmware won't break the client. Telemetry, login/repeater, traces, raw/binary/control
+data, and Node transports are planned.
 
 ## Crypto fidelity
 

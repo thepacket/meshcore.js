@@ -6,6 +6,8 @@ import { Connection } from './connection.js';
 import { Emitter } from './emitter.js';
 import * as encode from './protocol/encode.js';
 import type {
+  BatteryAndStorage,
+  Channel,
   Contact,
   CurrentTime,
   DecodedFrame,
@@ -15,6 +17,7 @@ import type {
   SendConfirmed,
   SendResult,
 } from './protocol/types.js';
+import type { ContactInput, RadioParams } from './protocol/encode.js';
 import { ERR_CODE_NAMES } from './protocol/constants.js';
 import type { MeshCoreCrypto } from './crypto/crypto.js';
 
@@ -181,6 +184,55 @@ export class MeshCore {
     return out;
   }
 
+  /** Fetch a single contact by its full public key, or `null` if not found. */
+  async getContactByKey(publicKey: string | Uint8Array): Promise<Contact | null> {
+    const frame = await this.connection.request(encode.getContactByKey(publicKey));
+    if (frame.type === 'contact') return frame.contact;
+    if (frame.type === 'error') {
+      if (frame.error.code === 2 /* NOT_FOUND */) return null;
+      throw new MeshCoreError(frame.error.code, frame.error.name);
+    }
+    throw new Error(`expected contact, got ${frame.type}`);
+  }
+
+  /** Add or update a contact. */
+  async addOrUpdateContact(contact: ContactInput): Promise<void> {
+    expectOk(await this.connection.request(encode.addUpdateContact(contact)));
+  }
+
+  /** Remove a contact by its public key. */
+  async removeContact(publicKey: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.removeContact(publicKey)));
+  }
+
+  /** Forget the cached out-path to a contact (revert to flood routing). */
+  async resetPath(publicKey: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.resetPath(publicKey)));
+  }
+
+  /** Re-share a contact via a zero-hop advertisement. */
+  async shareContact(publicKey: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.shareContact(publicKey)));
+  }
+
+  // -- channels -----------------------------------------------------------
+
+  /** Read a group channel by index, or `null` if the slot is empty. */
+  async getChannel(index: number): Promise<Channel | null> {
+    const frame = await this.connection.request(encode.getChannel(index));
+    if (frame.type === 'channelInfo') return frame.channel;
+    if (frame.type === 'error') {
+      if (frame.error.code === 2 /* NOT_FOUND */) return null;
+      throw new MeshCoreError(frame.error.code, frame.error.name);
+    }
+    throw new Error(`expected channelInfo, got ${frame.type}`);
+  }
+
+  /** Configure a group channel (name + 16-byte secret). */
+  async setChannel(index: number, name: string, secret: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.setChannel(index, name, secret)));
+  }
+
   // -- device / advertising ----------------------------------------------
 
   /** Read the device clock (epoch seconds). */
@@ -203,6 +255,33 @@ export class MeshCore {
   /** Update the node name used in advertisements. */
   async setAdvertName(name: string): Promise<void> {
     expectOk(await this.connection.request(encode.setAdvertName(name)));
+  }
+
+  /** Query battery voltage and flash storage usage. */
+  async getBatteryAndStorage(): Promise<BatteryAndStorage> {
+    const frame = await this.connection.request(encode.getBatteryAndStorage());
+    if (frame.type !== 'batteryAndStorage') {
+      throw new Error(`expected batteryAndStorage, got ${frame.type}`);
+    }
+    return frame.info;
+  }
+
+  /** Set LoRa radio parameters (frequency, bandwidth, SF, CR). */
+  async setRadioParams(params: RadioParams): Promise<void> {
+    expectOk(await this.connection.request(encode.setRadioParams(params)));
+  }
+
+  /** Set radio transmit power in dBm. */
+  async setRadioTxPower(dbm: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setRadioTxPower(dbm)));
+  }
+
+  /**
+   * Reboot the device. The device does not reply (it reboots immediately), so
+   * this is fire-and-forget and the transport will disconnect shortly after.
+   */
+  async reboot(): Promise<void> {
+    await this.connection.send(encode.reboot());
   }
 
   // -- internals ----------------------------------------------------------

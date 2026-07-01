@@ -4,16 +4,48 @@
  * Layouts mirror the parsers in MeshCore `MyMesh.cpp::handleCmdFrame`.
  */
 import { ByteWriter } from './writer.js';
-import { Cmd, TxtType, PUBKEY_PREFIX_SIZE } from './constants.js';
+import {
+  Cmd,
+  TxtType,
+  PUBKEY_PREFIX_SIZE,
+  PUB_KEY_SIZE,
+  MAX_PATH_SIZE,
+  CHANNEL_NAME_SIZE,
+  CHANNEL_SECRET_SIZE,
+  CONTACT_NAME_SIZE,
+  OUT_PATH_UNKNOWN,
+} from './constants.js';
 import { fromHex } from './hex.js';
+import type { Contact } from './types.js';
+
+function asBytes(v: string | Uint8Array): Uint8Array {
+  return typeof v === 'string' ? fromHex(v) : v;
+}
 
 /** First 6 bytes of a public key (hex or bytes) as used in message frames. */
 function pubKeyPrefix(key: string | Uint8Array): Uint8Array {
-  const bytes = typeof key === 'string' ? fromHex(key) : key;
+  const bytes = asBytes(key);
   if (bytes.length < PUBKEY_PREFIX_SIZE) {
     throw new Error(`public key prefix needs >= ${PUBKEY_PREFIX_SIZE} bytes`);
   }
   return bytes.subarray(0, PUBKEY_PREFIX_SIZE);
+}
+
+/** Exactly `size` bytes from hex/bytes, zero-padded or truncated. */
+function fixedBytes(v: string | Uint8Array, size: number): Uint8Array {
+  const src = asBytes(v);
+  const out = new Uint8Array(size);
+  out.set(src.subarray(0, size));
+  return out;
+}
+
+/** Full 32-byte public key (hex or bytes). */
+function fullPubKey(key: string | Uint8Array): Uint8Array {
+  const bytes = asBytes(key);
+  if (bytes.length < PUB_KEY_SIZE) {
+    throw new Error(`public key needs ${PUB_KEY_SIZE} bytes`);
+  }
+  return bytes.subarray(0, PUB_KEY_SIZE);
 }
 
 /** CMD.DEVICE_QUERY — sent first; `appVer` is the protocol version the app speaks. */
@@ -116,4 +148,112 @@ export function sendChannelTxtMsg(params: SendChannelTxtMsgParams): Uint8Array {
     .u32(timestamp)
     .str(text)
     .toBytes();
+}
+
+// -- channels ------------------------------------------------------------
+
+/** CMD.GET_CHANNEL. */
+export function getChannel(index: number): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_CHANNEL).u8(index).toBytes();
+}
+
+/** CMD.SET_CHANNEL — 16-byte (128-bit) shared secret only. */
+export function setChannel(index: number, name: string, secret: string | Uint8Array): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SET_CHANNEL)
+    .u8(index)
+    .fixedStr(name, CHANNEL_NAME_SIZE)
+    .bytes(fixedBytes(secret, CHANNEL_SECRET_SIZE))
+    .toBytes();
+}
+
+// -- contacts ------------------------------------------------------------
+
+/** Subset of {@link Contact} needed to add or update a contact. */
+export interface ContactInput {
+  publicKey: string | Uint8Array; // full 32-byte key
+  type: number;
+  flags?: number;
+  outPathLen?: number; // 0xFF = unknown/flood (default)
+  outPath?: string | Uint8Array; // up to 64 bytes; zero-padded
+  name: string;
+  lastAdvertTimestamp?: number;
+  gpsLat?: number; // degrees
+  gpsLon?: number; // degrees
+  lastMod?: number;
+}
+
+/** CMD.ADD_UPDATE_CONTACT — reverse of the CONTACT frame layout. */
+export function addUpdateContact(c: ContactInput): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.ADD_UPDATE_CONTACT)
+    .bytes(fullPubKey(c.publicKey))
+    .u8(c.type)
+    .u8(c.flags ?? 0)
+    .u8(c.outPathLen ?? OUT_PATH_UNKNOWN)
+    .bytes(fixedBytes(c.outPath ?? new Uint8Array(0), MAX_PATH_SIZE))
+    .fixedStr(c.name, CONTACT_NAME_SIZE)
+    .u32(c.lastAdvertTimestamp ?? 0)
+    .i32(Math.round((c.gpsLat ?? 0) * 1_000_000))
+    .i32(Math.round((c.gpsLon ?? 0) * 1_000_000))
+    .u32(c.lastMod ?? Math.floor(Date.now() / 1000))
+    .toBytes();
+}
+
+/** CMD.GET_CONTACT_BY_KEY — full 32-byte public key. */
+export function getContactByKey(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_CONTACT_BY_KEY).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+/** CMD.REMOVE_CONTACT. */
+export function removeContact(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.REMOVE_CONTACT).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+/** CMD.RESET_PATH — forget the cached out-path to a contact. */
+export function resetPath(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.RESET_PATH).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+/** CMD.SHARE_CONTACT — re-advertise a contact zero-hop. */
+export function shareContact(publicKey: string | Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.SHARE_CONTACT).bytes(fullPubKey(publicKey)).toBytes();
+}
+
+// -- device / radio ------------------------------------------------------
+
+/** CMD.GET_BATT_AND_STORAGE. */
+export function getBatteryAndStorage(): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_BATT_AND_STORAGE).toBytes();
+}
+
+/** CMD.REBOOT — requires the literal "reboot" magic bytes. */
+export function reboot(): Uint8Array {
+  return new ByteWriter().u8(Cmd.REBOOT).str('reboot').toBytes();
+}
+
+export interface RadioParams {
+  freqMHz: number;
+  bandwidthKHz: number;
+  spreadingFactor: number;
+  codingRate: number;
+  /** v9+ client repeat flag. */
+  repeat?: boolean;
+}
+
+/** CMD.SET_RADIO_PARAMS. Wire units: freq = MHz*1000, bw = kHz*1000. */
+export function setRadioParams(p: RadioParams): Uint8Array {
+  const w = new ByteWriter()
+    .u8(Cmd.SET_RADIO_PARAMS)
+    .u32(Math.round(p.freqMHz * 1000))
+    .u32(Math.round(p.bandwidthKHz * 1000))
+    .u8(p.spreadingFactor)
+    .u8(p.codingRate);
+  if (p.repeat !== undefined) w.u8(p.repeat ? 1 : 0);
+  return w.toBytes();
+}
+
+/** CMD.SET_RADIO_TX_POWER — signed dBm. */
+export function setRadioTxPower(dbm: number): Uint8Array {
+  return new ByteWriter().u8(Cmd.SET_RADIO_TX_POWER).i8(dbm).toBytes();
 }
