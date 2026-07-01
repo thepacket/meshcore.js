@@ -93,7 +93,7 @@
 
       $('connect').addEventListener('click', async () => {
         try {
-          const transport = new WebBluetoothTransport({ namePrefix: 'MeshCore' });
+          const transport = new WebBluetoothTransport(); // filter by NUS service UUID
           client = new MeshCore(transport);
 
           client.on('message', (m) =>

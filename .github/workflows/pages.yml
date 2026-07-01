@@ -1,0 +1,54 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Stage site (dist + examples + landing page)
+        run: |
+          mkdir -p _site
+          cp -r dist examples _site/
+          cat > _site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>meshcore.js</title>
+          <body style="font-family:system-ui;max-width:640px;margin:2rem auto;padding:0 1rem">
+          <h1>meshcore.js</h1>
+          <p>Web Bluetooth client for MeshCore devices. Open on Chrome/Edge (desktop or Android).</p>
+          <ul>
+            <li><a href="examples/diagnostics/">Hardware diagnostics harness</a></li>
+            <li><a href="examples/web-ble-demo/">Web Bluetooth demo</a></li>
+          </ul>
+          <p><a href="https://github.com/thepacket/meshcore.js">Source on GitHub</a></p>
+          </body>
+          HTML
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

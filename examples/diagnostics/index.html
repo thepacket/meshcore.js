@@ -109,7 +109,9 @@
       $('connect').addEventListener('click', async () => {
         try {
           maxFrame = 0;
-          transport = new WebBluetoothTransport({ namePrefix: 'MeshCore' });
+          // Filter by the NUS service UUID (name-independent; matches how the
+          // official app scans and is more reliable on macOS).
+          transport = new WebBluetoothTransport();
           instrument(transport);
           client = new MeshCore(transport);
           client.on('message', (m) => log(`EVENT message from ${m.senderPrefix ?? 'ch'+m.channelIdx}: "${m.text}" snr=${m.snr}`, 'ok'));
