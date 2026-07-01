@@ -19,6 +19,7 @@ import type {
   SelfInfo,
   SendConfirmed,
   SendResult,
+  TraceResult,
 } from './protocol/types.js';
 import type { ContactInput, RadioParams } from './protocol/encode.js';
 import { ERR_CODE_NAMES } from './protocol/constants.js';
@@ -32,6 +33,13 @@ export type TelemetryResult = NodeResponse & { readings: TelemetryReading[] };
 function pubKeyPrefixHex(key: string | Uint8Array): string {
   const bytes = typeof key === 'string' ? fromHex(key) : key;
   return toHex(bytes.subarray(0, 6));
+}
+
+/** A random 32-bit correlation tag. */
+function randomTag(): number {
+  const b = new Uint32Array(1);
+  crypto.getRandomValues(b);
+  return b[0]! >>> 0;
 }
 import type { MeshCoreCrypto } from './crypto/crypto.js';
 
@@ -57,6 +65,7 @@ export type MeshCoreEvents = {
   statusResponse: [NodeResponse];
   telemetryResponse: [NodeResponse];
   binaryResponse: [BinaryResponse];
+  traceData: [TraceResult];
   contactDeleted: [string];
   contactsFull: [];
   disconnect: [];
@@ -324,6 +333,29 @@ export class MeshCore {
     return { ...f.response, readings: parseTelemetry(f.response.data) };
   }
 
+  /**
+   * Trace a route through the given node hashes, collecting per-hop SNR.
+   * Resolves when the correlated TRACE_DATA push returns.
+   */
+  async tracePath(
+    path: string | Uint8Array,
+    options: { tag?: number; authCode?: number; flags?: number; timeoutMs?: number } = {},
+  ): Promise<TraceResult> {
+    const tag = options.tag ?? randomTag();
+    const pushed = this.waitForPush(
+      (f) => f.type === 'traceData' && f.trace.tag === tag,
+      options.timeoutMs ?? 30_000,
+    );
+    expectOk(
+      await this.connection.request(
+        encode.sendTracePath({ path, tag, authCode: options.authCode, flags: options.flags }),
+      ),
+    );
+    const f = await pushed;
+    if (f.type !== 'traceData') throw new Error(`unexpected ${f.type}`);
+    return f.trace;
+  }
+
   /** Read this device's own telemetry (replies immediately with a push). */
   async getSelfTelemetry(options: { timeoutMs?: number } = {}): Promise<TelemetryResult> {
     if (!this.selfInfo) throw new Error('call connect() first');
@@ -439,6 +471,9 @@ export class MeshCore {
         break;
       case 'binaryResponse':
         this.emitter.emit('binaryResponse', frame.response);
+        break;
+      case 'traceData':
+        this.emitter.emit('traceData', frame.trace);
         break;
       case 'contactDeleted':
         this.emitter.emit('contactDeleted', frame.publicKey);

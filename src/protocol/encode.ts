@@ -297,3 +297,25 @@ export function sendSelfTelemetryReq(): Uint8Array {
 export function hasConnection(publicKey: string | Uint8Array): Uint8Array {
   return new ByteWriter().u8(Cmd.HAS_CONNECTION).bytes(fullPubKey(publicKey)).toBytes();
 }
+
+export interface TracePathParams {
+  /** Node hashes to route the trace through (each 1<<(flags&3) bytes). */
+  path: string | Uint8Array;
+  /** Correlation tag echoed back in the TRACE_DATA response. */
+  tag: number;
+  /** Optional auth code (default 0). */
+  authCode?: number;
+  /** Flags; low 2 bits set the per-hop hash size (default 0 = 1 byte). */
+  flags?: number;
+}
+
+/** CMD.SEND_TRACE_PATH — trace a route, collecting per-hop SNR. */
+export function sendTracePath(p: TracePathParams): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SEND_TRACE_PATH)
+    .u32(p.tag)
+    .u32(p.authCode ?? 0)
+    .u8(p.flags ?? 0)
+    .bytes(asBytes(p.path))
+    .toBytes();
+}

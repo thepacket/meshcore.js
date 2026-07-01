@@ -133,6 +133,7 @@ Implemented commands:
 - **Channels:** `GET_CHANNEL`, `SET_CHANNEL` (+ base64 PSK helpers, `PUBLIC_CHANNEL`)
 - **Repeater/room:** `SEND_LOGIN`, `LOGOUT`, `HAS_CONNECTION`, `SEND_STATUS_REQ`,
   `SEND_TELEMETRY_REQ` (remote + self) — async request→push responses awaited for you
+- **Diagnostics:** `SEND_TRACE_PATH` — trace a route, resolving with per-hop SNR
 - **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,
   `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
 
@@ -153,7 +154,7 @@ for (const r of readings) console.log(`ch${r.channel} ${r.typeName}: ${r.value}$
 Telemetry blobs are decoded into `TelemetryReading[]` (voltage, temperature, humidity, GPS,
 accelerometer, …) via `parseTelemetry`; the raw `data` is still available. Status payloads
 remain raw bytes. Not-yet-modelled frames decode to `{ type: 'raw', code, payload }` rather than
-failing, so newer firmware won't break the client. Path traces and raw/binary/control data are
+failing, so newer firmware won't break the client. Raw/binary/control data passthrough is
 planned.
 
 ## Crypto fidelity

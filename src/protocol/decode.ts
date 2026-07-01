@@ -273,6 +273,31 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
         type: 'binaryResponse',
         response: { tag: r.u32(), data: r.rest() },
       };
+
+    case Push.TRACE_DATA: {
+      r.u8(); // reserved
+      const pathLen = r.u8();
+      const flags = r.u8();
+      const tag = r.u32();
+      const authCode = r.u32();
+      const pathHashes = r.bytes_(pathLen);
+      const pathSz = flags & 0x03;
+      const hashBytesPerHop = 1 << pathSz;
+      const hopCount = pathLen >> pathSz;
+      const hops: Array<{ hash: string; snr: number }> = [];
+      for (let h = 0; h < hopCount; h++) {
+        const start = h * hashBytesPerHop;
+        let hash = '';
+        for (let b = 0; b < hashBytesPerHop; b++) {
+          hash += pathHashes[start + b]!.toString(16).padStart(2, '0');
+        }
+        hops.push({ hash, snr: r.i8() / 4 });
+      }
+      return {
+        type: 'traceData',
+        trace: { tag, authCode, flags, hops, finalSnr: r.i8() / 4 },
+      };
+    }
     case Push.MSG_WAITING:
       return { type: 'messageWaiting' };
     case Push.CONTACT_DELETED:

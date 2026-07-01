@@ -135,6 +135,24 @@ export interface BinaryResponse {
   data: Uint8Array;
 }
 
+/** One hop in a completed path trace. */
+export interface TraceHop {
+  /** Node hash for this hop (hex; 1+ bytes depending on flags). */
+  hash: string;
+  /** SNR in dB reported at this hop. */
+  snr: number;
+}
+
+/** PUSH.TRACE_DATA — a completed path trace with per-hop SNR. */
+export interface TraceResult {
+  tag: number;
+  authCode: number;
+  flags: number;
+  hops: TraceHop[];
+  /** SNR (dB) of the final packet arriving back at this device. */
+  finalSnr: number;
+}
+
 /** A generic error reply (RESP.ERR). */
 export interface ErrorResult {
   code: number;
@@ -167,6 +185,7 @@ export type DecodedFrame =
   | { type: 'statusResponse'; response: NodeResponse }
   | { type: 'telemetryResponse'; response: NodeResponse }
   | { type: 'binaryResponse'; response: BinaryResponse }
+  | { type: 'traceData'; trace: TraceResult }
   | { type: 'messageWaiting' }
   | { type: 'contactDeleted'; publicKey: string }
   | { type: 'contactsFull' }
