@@ -1,5 +1,7 @@
 # meshcore.js
 
+[![CI](https://github.com/thepacket/meshcore.js/actions/workflows/ci.yml/badge.svg)](https://github.com/thepacket/meshcore.js/actions/workflows/ci.yml)
+
 A browser client for [MeshCore](https://github.com/meshcore-dev/MeshCore) companion
 devices. It speaks the **Companion Radio Protocol** over **Web Bluetooth**, with the
 security-critical crypto compiled to **WebAssembly from MeshCore's own C sources** so it is
