@@ -45,6 +45,27 @@ describe('parseRepeaterStatus', () => {
 });
 
 describe('parseRoomServerStatus', () => {
+  // Real 60-byte blob captured from a T-Echo room server "LostPacketRS".
+  const REAL_ROOM =
+    'c20f00008cfff1ff0400000002000000000000002f0300000100000001000000010000000300000000002e0000000100000000000000000000000000';
+
+  it('decodes the real hardware room-server blob', () => {
+    const s = parseRoomServerStatus(fromHex(REAL_ROOM));
+    expect(s.kind).toBe('room');
+    expect(s.batteryMillivolts).toBe(4034);
+    expect(s.noiseFloor).toBe(-116);
+    expect(s.lastRssi).toBe(-15);
+    expect(s.uptimeSeconds).toBe(815);
+    expect(s.packetsReceived).toBe(4);
+    expect(s.packetsSent).toBe(2);
+    expect(s.sentFlood).toBe(1);
+    expect(s.recvDirect).toBe(3);
+    expect(s.lastSnr).toBe(11.5);
+    expect(s.floodDups).toBe(1);
+    expect(s.posted).toBe(0);
+    expect(s.postPushes).toBe(0);
+  });
+
   it('decodes the room-server tail (posted / postPushes)', () => {
     const w = new ByteWriter()
       .u16(4000).u16(1) // batt, queue
