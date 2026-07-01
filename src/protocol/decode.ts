@@ -199,6 +199,42 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
     case Resp.CURR_TIME:
       return { type: 'currentTime', time: { epochSeconds: r.u32() } };
 
+    case Resp.CUSTOM_VARS: {
+      const text = r.restStr();
+      const vars: Record<string, string> = {};
+      if (text.length > 0) {
+        for (const pair of text.split(',')) {
+          const idx = pair.indexOf(':');
+          if (idx >= 0) vars[pair.slice(0, idx)] = pair.slice(idx + 1);
+        }
+      }
+      return { type: 'customVars', vars };
+    }
+
+    case Resp.TUNING_PARAMS:
+      return {
+        type: 'tuningParams',
+        params: { rxDelayBase: r.u32() / 1000, airtimeFactor: r.u32() / 1000 },
+      };
+
+    case Resp.AUTOADD_CONFIG:
+      return { type: 'autoAddConfig', config: { config: r.u8(), maxHops: r.u8() } };
+
+    case Resp.ALLOWED_REPEAT_FREQ: {
+      const ranges: Array<{ lowerMHz: number; upperMHz: number }> = [];
+      while (r.remaining >= 8) {
+        ranges.push({ lowerMHz: r.u32() / 1000, upperMHz: r.u32() / 1000 });
+      }
+      return { type: 'allowedRepeatFreq', ranges };
+    }
+
+    case Resp.SIGN_START:
+      r.u8(); // reserved
+      return { type: 'signStart', maxLen: r.u32() };
+
+    case Resp.SIGNATURE:
+      return { type: 'signature', signature: r.rest() };
+
     case Resp.CHANNEL_INFO:
       return {
         type: 'channelInfo',

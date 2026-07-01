@@ -367,3 +367,119 @@ export function sendControlData(payload: string | Uint8Array): Uint8Array {
   }
   return new ByteWriter().u8(Cmd.SEND_CONTROL_DATA).bytes(bytes).toBytes();
 }
+
+// -- configuration ------------------------------------------------------
+
+/** CMD.GET_CUSTOM_VARS. */
+export function getCustomVars(): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_CUSTOM_VARS).toBytes();
+}
+
+/** CMD.SET_CUSTOM_VAR — sets `name` to `value` (sent as "name:value"). */
+export function setCustomVar(name: string, value: string): Uint8Array {
+  return new ByteWriter().u8(Cmd.SET_CUSTOM_VAR).str(`${name}:${value}`).toBytes();
+}
+
+/** CMD.GET_TUNING_PARAMS. */
+export function getTuningParams(): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_TUNING_PARAMS).toBytes();
+}
+
+/** CMD.SET_TUNING_PARAMS. Wire units are the float values * 1000. */
+export function setTuningParams(rxDelayBase: number, airtimeFactor: number): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SET_TUNING_PARAMS)
+    .u32(Math.round(rxDelayBase * 1000))
+    .u32(Math.round(airtimeFactor * 1000))
+    .toBytes();
+}
+
+/** CMD.SET_DEVICE_PIN — 0 to disable, or a 6-digit PIN. */
+export function setDevicePin(pin: number): Uint8Array {
+  return new ByteWriter().u8(Cmd.SET_DEVICE_PIN).u32(pin).toBytes();
+}
+
+export interface OtherParams {
+  manualAddContacts: number;
+  telemetryModeBase?: number;
+  telemetryModeLoc?: number;
+  telemetryModeEnv?: number;
+  advertLocPolicy?: number;
+  multiAcks?: number;
+}
+
+/** CMD.SET_OTHER_PARAMS — trailing fields are optional (firmware-version gated). */
+export function setOtherParams(p: OtherParams): Uint8Array {
+  const w = new ByteWriter().u8(Cmd.SET_OTHER_PARAMS).u8(p.manualAddContacts);
+  const hasTelemetry =
+    p.telemetryModeBase !== undefined ||
+    p.telemetryModeLoc !== undefined ||
+    p.telemetryModeEnv !== undefined ||
+    p.advertLocPolicy !== undefined ||
+    p.multiAcks !== undefined;
+  if (hasTelemetry) {
+    w.u8(
+      ((p.telemetryModeEnv ?? 0) << 4) |
+        ((p.telemetryModeLoc ?? 0) << 2) |
+        (p.telemetryModeBase ?? 0),
+    );
+    if (p.advertLocPolicy !== undefined || p.multiAcks !== undefined) {
+      w.u8(p.advertLocPolicy ?? 0);
+      if (p.multiAcks !== undefined) w.u8(p.multiAcks);
+    }
+  }
+  return w.toBytes();
+}
+
+/** CMD.GET_AUTOADD_CONFIG. */
+export function getAutoAddConfig(): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_AUTOADD_CONFIG).toBytes();
+}
+
+/** CMD.SET_AUTOADD_CONFIG. */
+export function setAutoAddConfig(config: number, maxHops?: number): Uint8Array {
+  const w = new ByteWriter().u8(Cmd.SET_AUTOADD_CONFIG).u8(config);
+  if (maxHops !== undefined) w.u8(maxHops);
+  return w.toBytes();
+}
+
+/** CMD.GET_ALLOWED_REPEAT_FREQ. */
+export function getAllowedRepeatFreq(): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_ALLOWED_REPEAT_FREQ).toBytes();
+}
+
+/** CMD.SET_PATH_HASH_MODE (0..2). */
+export function setPathHashMode(mode: number): Uint8Array {
+  return new ByteWriter().u8(Cmd.SET_PATH_HASH_MODE).u8(0).u8(mode).toBytes();
+}
+
+/** CMD.SET_ADVERT_LATLON — location in advertisements (degrees). */
+export function setAdvertLatLon(lat: number, lon: number): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SET_ADVERT_LATLON)
+    .i32(Math.round(lat * 1_000_000))
+    .i32(Math.round(lon * 1_000_000))
+    .toBytes();
+}
+
+/** CMD.FACTORY_RESET — requires the literal "reset" magic bytes. */
+export function factoryReset(): Uint8Array {
+  return new ByteWriter().u8(Cmd.FACTORY_RESET).str('reset').toBytes();
+}
+
+// -- device sign API ----------------------------------------------------
+
+/** CMD.SIGN_START — begin a signing session. */
+export function signStart(): Uint8Array {
+  return new ByteWriter().u8(Cmd.SIGN_START).toBytes();
+}
+
+/** CMD.SIGN_DATA — append a chunk of data to sign. */
+export function signData(chunk: Uint8Array): Uint8Array {
+  return new ByteWriter().u8(Cmd.SIGN_DATA).bytes(chunk).toBytes();
+}
+
+/** CMD.SIGN_FINISH — finish and return the 64-byte signature. */
+export function signFinish(): Uint8Array {
+  return new ByteWriter().u8(Cmd.SIGN_FINISH).toBytes();
+}

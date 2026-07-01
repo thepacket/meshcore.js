@@ -7,6 +7,7 @@ import { Emitter } from './emitter.js';
 import * as encode from './protocol/encode.js';
 import type {
   BatteryAndStorage,
+  AutoAddConfig,
   BinaryResponse,
   Channel,
   Contact,
@@ -14,6 +15,7 @@ import type {
   CurrentTime,
   DecodedFrame,
   DeviceInfo,
+  FreqRange,
   InboundMessage,
   LoginResult,
   NodeResponse,
@@ -22,8 +24,9 @@ import type {
   SendConfirmed,
   SendResult,
   TraceResult,
+  TuningParams,
 } from './protocol/types.js';
-import type { ContactInput, RadioParams } from './protocol/encode.js';
+import type { ContactInput, OtherParams, RadioParams } from './protocol/encode.js';
 import { ERR_CODE_NAMES } from './protocol/constants.js';
 import { fromHex, toHex } from './protocol/hex.js';
 import { parseTelemetry, type TelemetryReading } from './telemetry.js';
@@ -482,6 +485,98 @@ export class MeshCore {
    */
   async reboot(): Promise<void> {
     await this.connection.send(encode.reboot());
+  }
+
+  // -- configuration ------------------------------------------------------
+
+  /** Read all custom variables (sensor/app settings) as a name→value map. */
+  async getCustomVars(): Promise<Record<string, string>> {
+    const f = await this.connection.request(encode.getCustomVars());
+    if (f.type !== 'customVars') throw new Error(`expected customVars, got ${f.type}`);
+    return f.vars;
+  }
+
+  /** Set a custom variable. */
+  async setCustomVar(name: string, value: string): Promise<void> {
+    expectOk(await this.connection.request(encode.setCustomVar(name, value)));
+  }
+
+  /** Read airtime/rx tuning parameters. */
+  async getTuningParams(): Promise<TuningParams> {
+    const f = await this.connection.request(encode.getTuningParams());
+    if (f.type !== 'tuningParams') throw new Error(`expected tuningParams, got ${f.type}`);
+    return f.params;
+  }
+
+  /** Set airtime/rx tuning parameters. */
+  async setTuningParams(rxDelayBase: number, airtimeFactor: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setTuningParams(rxDelayBase, airtimeFactor)));
+  }
+
+  /** Set the BLE pairing PIN (0 to disable, or a 6-digit number). */
+  async setDevicePin(pin: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setDevicePin(pin)));
+  }
+
+  /** Set miscellaneous parameters (manual-add, telemetry modes, etc.). */
+  async setOtherParams(params: OtherParams): Promise<void> {
+    expectOk(await this.connection.request(encode.setOtherParams(params)));
+  }
+
+  /** Read the auto-add-contacts configuration. */
+  async getAutoAddConfig(): Promise<AutoAddConfig> {
+    const f = await this.connection.request(encode.getAutoAddConfig());
+    if (f.type !== 'autoAddConfig') throw new Error(`expected autoAddConfig, got ${f.type}`);
+    return f.config;
+  }
+
+  /** Set the auto-add-contacts configuration. */
+  async setAutoAddConfig(config: number, maxHops?: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setAutoAddConfig(config, maxHops)));
+  }
+
+  /** Read the frequency ranges in which repeat mode is permitted. */
+  async getAllowedRepeatFreqs(): Promise<FreqRange[]> {
+    const f = await this.connection.request(encode.getAllowedRepeatFreq());
+    if (f.type !== 'allowedRepeatFreq') throw new Error(`expected allowedRepeatFreq, got ${f.type}`);
+    return f.ranges;
+  }
+
+  /** Set the path-hash mode (0..2). */
+  async setPathHashMode(mode: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setPathHashMode(mode)));
+  }
+
+  /** Set the advertised location (degrees). */
+  async setAdvertLatLon(lat: number, lon: number): Promise<void> {
+    expectOk(await this.connection.request(encode.setAdvertLatLon(lat, lon)));
+  }
+
+  /** Erase the device's flash filesystem. Fire-and-forget (device resets). */
+  async factoryReset(): Promise<void> {
+    await this.connection.send(encode.factoryReset());
+  }
+
+  /**
+   * Sign arbitrary data with the device's identity key. Streams the data to the
+   * device (SIGN_START → SIGN_DATA… → SIGN_FINISH) and returns the 64-byte
+   * Ed25519 signature.
+   */
+  async signData(data: Uint8Array, options: { chunkSize?: number } = {}): Promise<Uint8Array> {
+    const chunkSize = options.chunkSize ?? 128;
+    const start = await this.connection.request(encode.signStart());
+    if (start.type === 'error') throw new MeshCoreError(start.error.code, start.error.name);
+    if (start.type !== 'signStart') throw new Error(`expected signStart, got ${start.type}`);
+    if (data.length > start.maxLen) {
+      throw new Error(`data length ${data.length} exceeds device max ${start.maxLen}`);
+    }
+    for (let off = 0; off < data.length; off += chunkSize) {
+      expectOk(await this.connection.request(encode.signData(data.subarray(off, off + chunkSize))));
+    }
+    const fin = await this.connection.request(encode.signFinish());
+    if (fin.type === 'error') throw new MeshCoreError(fin.error.code, fin.error.name);
+    if (fin.type !== 'signature') throw new Error(`expected signature, got ${fin.type}`);
+    return fin.signature;
   }
 
   // -- internals ----------------------------------------------------------

@@ -137,7 +137,10 @@ Implemented commands:
 - **Passthrough:** `SEND_RAW_DATA`, `SEND_CONTROL_DATA`, `SEND_BINARY_REQ` — custom payloads
   for apps with their own encoding (`requestBinary` correlates the reply by device tag)
 - **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,
-  `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
+  `SET_ADVERT_LATLON`, `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
+- **Config:** custom vars (`GET`/`SET_CUSTOM_VAR`), tuning params, `SET_DEVICE_PIN`,
+  `SET_OTHER_PARAMS`, autoadd config, allowed repeat freqs, path-hash mode, `FACTORY_RESET`
+- **Signing:** `signData()` streams data to the device and returns its Ed25519 signature
 
 Handled pushes: `ADVERT`, `NEW_ADVERT`, `PATH_UPDATED`, `SEND_CONFIRMED`, `MSG_WAITING`
 (auto-drains the offline queue), `LOGIN_SUCCESS`/`LOGIN_FAIL`, `STATUS_RESPONSE`,

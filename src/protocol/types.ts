@@ -170,6 +170,28 @@ export interface TraceResult {
   finalSnr: number;
 }
 
+/** RESP.TUNING_PARAMS — airtime/rx tuning. */
+export interface TuningParams {
+  /** Base RX delay in seconds. */
+  rxDelayBase: number;
+  /** Airtime budget factor. */
+  airtimeFactor: number;
+}
+
+/** RESP.AUTOADD_CONFIG — automatic contact-adding config. */
+export interface AutoAddConfig {
+  /** Bitmask (see AUTO_ADD_* in the firmware). */
+  config: number;
+  /** Max hops for auto-added contacts. */
+  maxHops: number;
+}
+
+/** A frequency range (MHz) in which repeat mode is permitted. */
+export interface FreqRange {
+  lowerMHz: number;
+  upperMHz: number;
+}
+
 /** A generic error reply (RESP.ERR). */
 export interface ErrorResult {
   code: number;
@@ -191,6 +213,12 @@ export type DecodedFrame =
   | { type: 'currentTime'; time: CurrentTime }
   | { type: 'channelInfo'; channel: Channel }
   | { type: 'batteryAndStorage'; info: BatteryAndStorage }
+  | { type: 'customVars'; vars: Record<string, string> }
+  | { type: 'tuningParams'; params: TuningParams }
+  | { type: 'autoAddConfig'; config: AutoAddConfig }
+  | { type: 'allowedRepeatFreq'; ranges: FreqRange[] }
+  | { type: 'signStart'; maxLen: number }
+  | { type: 'signature'; signature: Uint8Array }
   | { type: 'message'; message: InboundMessage }
   // pushes
   | { type: 'advert'; publicKey: string }
