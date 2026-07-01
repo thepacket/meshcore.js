@@ -8,6 +8,7 @@ import { ByteReader } from './reader.js';
 import {
   Resp,
   Push,
+  StatsType,
   TxtType,
   ERR_CODE_NAMES,
   PUB_KEY_SIZE,
@@ -234,6 +235,51 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
 
     case Resp.SIGNATURE:
       return { type: 'signature', signature: r.rest() };
+
+    case Resp.STATS: {
+      const subType = r.u8();
+      if (subType === StatsType.CORE) {
+        return {
+          type: 'stats',
+          stats: {
+            kind: 'core',
+            batteryMillivolts: r.u16(),
+            uptimeSeconds: r.u32(),
+            errFlags: r.u16(),
+            queueLength: r.u8(),
+          },
+        };
+      }
+      if (subType === StatsType.RADIO) {
+        return {
+          type: 'stats',
+          stats: {
+            kind: 'radio',
+            noiseFloor: r.i16(),
+            lastRssi: r.i8(),
+            lastSnr: r.i8() / 4,
+            txAirtimeSeconds: r.u32(),
+            rxAirtimeSeconds: r.u32(),
+          },
+        };
+      }
+      if (subType === StatsType.PACKETS) {
+        return {
+          type: 'stats',
+          stats: {
+            kind: 'packets',
+            received: r.u32(),
+            sent: r.u32(),
+            sentFlood: r.u32(),
+            sentDirect: r.u32(),
+            recvFlood: r.u32(),
+            recvDirect: r.u32(),
+            recvErrors: r.u32(),
+          },
+        };
+      }
+      return { type: 'raw', code, payload: frame.slice(1) };
+    }
 
     case Resp.CHANNEL_INFO:
       return {

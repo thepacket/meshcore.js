@@ -27,7 +27,8 @@ import type {
   TuningParams,
 } from './protocol/types.js';
 import type { ContactInput, OtherParams, RadioParams } from './protocol/encode.js';
-import { ERR_CODE_NAMES } from './protocol/constants.js';
+import { ERR_CODE_NAMES, StatsType } from './protocol/constants.js';
+import type { Stats } from './protocol/types.js';
 import { fromHex, toHex } from './protocol/hex.js';
 import { parseTelemetry, type TelemetryReading } from './telemetry.js';
 
@@ -458,6 +459,31 @@ export class MeshCore {
   /** Update the node name used in advertisements. */
   async setAdvertName(name: string): Promise<void> {
     expectOk(await this.connection.request(encode.setAdvertName(name)));
+  }
+
+  /** Read device statistics for the given sub-type (core/radio/packets). */
+  async getStats(statsType: number): Promise<Stats> {
+    const f = await this.connection.request(encode.getStats(statsType));
+    if (f.type !== 'stats') {
+      if (f.type === 'error') throw new MeshCoreError(f.error.code, f.error.name);
+      throw new Error(`expected stats, got ${f.type}`);
+    }
+    return f.stats;
+  }
+
+  /** Core stats: battery, uptime, error flags, outbound queue length. */
+  getCoreStats(): Promise<Extract<Stats, { kind: 'core' }>> {
+    return this.getStats(StatsType.CORE) as Promise<Extract<Stats, { kind: 'core' }>>;
+  }
+
+  /** Radio stats: noise floor, last RSSI/SNR, TX/RX airtime. */
+  getRadioStats(): Promise<Extract<Stats, { kind: 'radio' }>> {
+    return this.getStats(StatsType.RADIO) as Promise<Extract<Stats, { kind: 'radio' }>>;
+  }
+
+  /** Packet counters: sent/received totals, flood/direct splits, errors. */
+  getPacketStats(): Promise<Extract<Stats, { kind: 'packets' }>> {
+    return this.getStats(StatsType.PACKETS) as Promise<Extract<Stats, { kind: 'packets' }>>;
   }
 
   /** Query battery voltage and flash storage usage. */

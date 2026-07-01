@@ -133,6 +133,13 @@ export const AdvType = {
   SENSOR: 4,
 } as const;
 
+/** Stats sub-types for CMD.GET_STATS. */
+export const StatsType = {
+  CORE: 0,
+  RADIO: 1,
+  PACKETS: 2,
+} as const;
+
 /** Text message types. */
 export const TxtType = {
   PLAIN: 0,

@@ -192,6 +192,34 @@ export interface FreqRange {
   upperMHz: number;
 }
 
+/** RESP.STATS — device counters, discriminated by sub-type. */
+export type Stats =
+  | {
+      kind: 'core';
+      batteryMillivolts: number;
+      uptimeSeconds: number;
+      errFlags: number;
+      queueLength: number;
+    }
+  | {
+      kind: 'radio';
+      noiseFloor: number;
+      lastRssi: number;
+      lastSnr: number; // dB
+      txAirtimeSeconds: number;
+      rxAirtimeSeconds: number;
+    }
+  | {
+      kind: 'packets';
+      received: number;
+      sent: number;
+      sentFlood: number;
+      sentDirect: number;
+      recvFlood: number;
+      recvDirect: number;
+      recvErrors: number;
+    };
+
 /** A generic error reply (RESP.ERR). */
 export interface ErrorResult {
   code: number;
@@ -219,6 +247,7 @@ export type DecodedFrame =
   | { type: 'allowedRepeatFreq'; ranges: FreqRange[] }
   | { type: 'signStart'; maxLen: number }
   | { type: 'signature'; signature: Uint8Array }
+  | { type: 'stats'; stats: Stats }
   | { type: 'message'; message: InboundMessage }
   // pushes
   | { type: 'advert'; publicKey: string }

@@ -133,7 +133,8 @@ Implemented commands:
 - **Channels:** `GET_CHANNEL`, `SET_CHANNEL` (+ base64 PSK helpers, `PUBLIC_CHANNEL`)
 - **Repeater/room:** `SEND_LOGIN`, `LOGOUT`, `HAS_CONNECTION`, `SEND_STATUS_REQ`,
   `SEND_TELEMETRY_REQ` (remote + self) — async request→push responses awaited for you
-- **Diagnostics:** `SEND_TRACE_PATH` — trace a route, resolving with per-hop SNR
+- **Diagnostics:** `SEND_TRACE_PATH` — trace a route, resolving with per-hop SNR;
+  `GET_STATS` — core (battery/uptime/queue), radio (noise/RSSI/SNR/airtime), packet counters
 - **Passthrough:** `SEND_RAW_DATA`, `SEND_CONTROL_DATA`, `SEND_BINARY_REQ` — custom payloads
   for apps with their own encoding (`requestBinary` correlates the reply by device tag)
 - **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,

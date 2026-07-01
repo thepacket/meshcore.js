@@ -483,3 +483,8 @@ export function signData(chunk: Uint8Array): Uint8Array {
 export function signFinish(): Uint8Array {
   return new ByteWriter().u8(Cmd.SIGN_FINISH).toBytes();
 }
+
+/** CMD.GET_STATS — `statsType` is one of StatsType (core/radio/packets). */
+export function getStats(statsType: number): Uint8Array {
+  return new ByteWriter().u8(Cmd.GET_STATS).u8(statsType).toBytes();
+}

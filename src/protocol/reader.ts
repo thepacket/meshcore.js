@@ -50,6 +50,13 @@ export class ByteReader {
     return v;
   }
 
+  i16(): number {
+    this.ensure(2);
+    const v = this.view.getInt16(this.offset, true);
+    this.offset += 2;
+    return v;
+  }
+
   u32(): number {
     this.ensure(4);
     const v = this.view.getUint32(this.offset, true);
