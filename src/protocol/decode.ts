@@ -392,6 +392,11 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
       const pathLen = r.u8();
       return { type: 'controlData', data: { snr, rssi, pathLen, payload: r.rest() } };
     }
+    case Push.LOG_RX_DATA: {
+      const snr = r.i8() / 4;
+      const rssi = r.i8();
+      return { type: 'rxLog', data: { snr, rssi, raw: r.rest() } };
+    }
     case Push.MSG_WAITING:
       return { type: 'messageWaiting' };
     case Push.CONTACT_DELETED:

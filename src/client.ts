@@ -20,6 +20,7 @@ import type {
   LoginResult,
   NodeResponse,
   RawData,
+  RxLogData,
   SelfInfo,
   SendConfirmed,
   SendResult,
@@ -74,6 +75,7 @@ export type MeshCoreEvents = {
   traceData: [TraceResult];
   rawData: [RawData];
   controlData: [ControlData];
+  rxLog: [RxLogData];
   contactDeleted: [string];
   contactsFull: [];
   disconnect: [];
@@ -664,6 +666,9 @@ export class MeshCore {
         break;
       case 'controlData':
         this.emitter.emit('controlData', frame.data);
+        break;
+      case 'rxLog':
+        this.emitter.emit('rxLog', frame.data);
         break;
       case 'contactDeleted':
         this.emitter.emit('contactDeleted', frame.publicKey);

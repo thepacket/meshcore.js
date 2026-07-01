@@ -54,6 +54,16 @@ describe('raw/control decoders', () => {
     expect(d.data.pathLen).toBe(3);
     expect(toHex(d.data.payload)).toBe('8899');
   });
+
+  it('LOG_RX_DATA: snr, rssi, raw packet', () => {
+    // observed on real hardware as code 0x88
+    const w = new ByteWriter().u8(Push.LOG_RX_DATA).i8(21).i8(-106).bytes(fromHex('001122'));
+    const d = decodeFrame(w.toBytes());
+    if (d.type !== 'rxLog') throw new Error('wrong type');
+    expect(d.data.snr).toBe(5.25);
+    expect(d.data.rssi).toBe(-106);
+    expect(toHex(d.data.raw)).toBe('001122');
+  });
 });
 
 // ---- client flow ----

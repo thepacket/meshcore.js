@@ -152,6 +152,14 @@ export interface ControlData {
   payload: Uint8Array;
 }
 
+/** PUSH.LOG_RX_DATA — a raw over-the-air packet the device overheard. */
+export interface RxLogData {
+  snr: number;
+  rssi: number;
+  /** The raw received packet bytes. */
+  raw: Uint8Array;
+}
+
 /** One hop in a completed path trace. */
 export interface TraceHop {
   /** Node hash for this hop (hex; 1+ bytes depending on flags). */
@@ -262,6 +270,7 @@ export type DecodedFrame =
   | { type: 'traceData'; trace: TraceResult }
   | { type: 'rawData'; data: RawData }
   | { type: 'controlData'; data: ControlData }
+  | { type: 'rxLog'; data: RxLogData }
   | { type: 'messageWaiting' }
   | { type: 'contactDeleted'; publicKey: string }
   | { type: 'contactsFull' }
