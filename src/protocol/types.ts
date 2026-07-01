@@ -135,6 +135,23 @@ export interface BinaryResponse {
   data: Uint8Array;
 }
 
+/** PUSH.RAW_DATA — an inbound custom/raw packet with radio metadata. */
+export interface RawData {
+  /** SNR in dB. */
+  snr: number;
+  /** RSSI in dBm. */
+  rssi: number;
+  payload: Uint8Array;
+}
+
+/** PUSH.CONTROL_DATA — an inbound control packet. */
+export interface ControlData {
+  snr: number;
+  rssi: number;
+  pathLen: number;
+  payload: Uint8Array;
+}
+
 /** One hop in a completed path trace. */
 export interface TraceHop {
   /** Node hash for this hop (hex; 1+ bytes depending on flags). */
@@ -186,6 +203,8 @@ export type DecodedFrame =
   | { type: 'telemetryResponse'; response: NodeResponse }
   | { type: 'binaryResponse'; response: BinaryResponse }
   | { type: 'traceData'; trace: TraceResult }
+  | { type: 'rawData'; data: RawData }
+  | { type: 'controlData'; data: ControlData }
   | { type: 'messageWaiting' }
   | { type: 'contactDeleted'; publicKey: string }
   | { type: 'contactsFull' }

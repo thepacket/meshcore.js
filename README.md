@@ -134,12 +134,15 @@ Implemented commands:
 - **Repeater/room:** `SEND_LOGIN`, `LOGOUT`, `HAS_CONNECTION`, `SEND_STATUS_REQ`,
   `SEND_TELEMETRY_REQ` (remote + self) — async request→push responses awaited for you
 - **Diagnostics:** `SEND_TRACE_PATH` — trace a route, resolving with per-hop SNR
+- **Passthrough:** `SEND_RAW_DATA`, `SEND_CONTROL_DATA`, `SEND_BINARY_REQ` — custom payloads
+  for apps with their own encoding (`requestBinary` correlates the reply by device tag)
 - **Device/radio:** `GET_DEVICE_TIME`, `SET_DEVICE_TIME`, `SEND_SELF_ADVERT`, `SET_ADVERT_NAME`,
   `GET_BATT_AND_STORAGE`, `SET_RADIO_PARAMS`, `SET_RADIO_TX_POWER`, `REBOOT`
 
 Handled pushes: `ADVERT`, `NEW_ADVERT`, `PATH_UPDATED`, `SEND_CONFIRMED`, `MSG_WAITING`
 (auto-drains the offline queue), `LOGIN_SUCCESS`/`LOGIN_FAIL`, `STATUS_RESPONSE`,
-`TELEMETRY_RESPONSE`, `BINARY_RESPONSE`, `CONTACT_DELETED`, `CONTACTS_FULL`.
+`TELEMETRY_RESPONSE`, `BINARY_RESPONSE`, `TRACE_DATA`, `RAW_DATA`, `CONTROL_DATA`,
+`CONTACT_DELETED`, `CONTACTS_FULL`.
 
 ```ts
 // repeater login + status (the correlated push is awaited automatically)

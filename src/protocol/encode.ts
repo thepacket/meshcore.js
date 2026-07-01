@@ -319,3 +319,51 @@ export function sendTracePath(p: TracePathParams): Uint8Array {
     .bytes(asBytes(p.path))
     .toBytes();
 }
+
+// -- raw / binary / control passthrough ---------------------------------
+
+/**
+ * CMD.SEND_RAW_DATA — send a custom/raw packet along a direct `path`
+ * (list of node hashes). `payload` must be at least 4 bytes.
+ */
+export function sendRawData(
+  path: string | Uint8Array,
+  payload: string | Uint8Array,
+): Uint8Array {
+  const pathBytes = asBytes(path);
+  const payloadBytes = asBytes(payload);
+  if (payloadBytes.length < 4) throw new Error('sendRawData: payload must be >= 4 bytes');
+  return new ByteWriter()
+    .u8(Cmd.SEND_RAW_DATA)
+    .u8(pathBytes.length)
+    .bytes(pathBytes)
+    .bytes(payloadBytes)
+    .toBytes();
+}
+
+/**
+ * CMD.SEND_BINARY_REQ — send a binary request to a node. The device assigns a
+ * tag (returned in the SENT reply) that matches the later BINARY_RESPONSE.
+ */
+export function sendBinaryReq(
+  publicKey: string | Uint8Array,
+  data: string | Uint8Array,
+): Uint8Array {
+  return new ByteWriter()
+    .u8(Cmd.SEND_BINARY_REQ)
+    .bytes(fullPubKey(publicKey))
+    .bytes(asBytes(data))
+    .toBytes();
+}
+
+/**
+ * CMD.SEND_CONTROL_DATA — send a control packet (zero-hop). The first payload
+ * byte must have its high bit (0x80) set.
+ */
+export function sendControlData(payload: string | Uint8Array): Uint8Array {
+  const bytes = asBytes(payload);
+  if (bytes.length < 1 || (bytes[0]! & 0x80) === 0) {
+    throw new Error('sendControlData: first payload byte must have bit 0x80 set');
+  }
+  return new ByteWriter().u8(Cmd.SEND_CONTROL_DATA).bytes(bytes).toBytes();
+}

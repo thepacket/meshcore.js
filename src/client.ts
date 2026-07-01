@@ -10,12 +10,14 @@ import type {
   BinaryResponse,
   Channel,
   Contact,
+  ControlData,
   CurrentTime,
   DecodedFrame,
   DeviceInfo,
   InboundMessage,
   LoginResult,
   NodeResponse,
+  RawData,
   SelfInfo,
   SendConfirmed,
   SendResult,
@@ -66,6 +68,8 @@ export type MeshCoreEvents = {
   telemetryResponse: [NodeResponse];
   binaryResponse: [BinaryResponse];
   traceData: [TraceResult];
+  rawData: [RawData];
+  controlData: [ControlData];
   contactDeleted: [string];
   contactsFull: [];
   disconnect: [];
@@ -333,6 +337,65 @@ export class MeshCore {
     return { ...f.response, readings: parseTelemetry(f.response.data) };
   }
 
+  // -- raw / binary / control passthrough --------------------------------
+
+  /** Send a custom/raw data packet along a direct path (list of node hashes). */
+  async sendRawData(
+    path: string | Uint8Array,
+    payload: string | Uint8Array,
+  ): Promise<void> {
+    expectOk(await this.connection.request(encode.sendRawData(path, payload)));
+  }
+
+  /** Send a control packet (zero-hop; first payload byte must have bit 0x80). */
+  async sendControlData(payload: string | Uint8Array): Promise<void> {
+    expectOk(await this.connection.request(encode.sendControlData(payload)));
+  }
+
+  /**
+   * Send a binary request to a node and resolve with its BINARY_RESPONSE.
+   * The device assigns the correlation tag (returned in the SENT reply).
+   */
+  async requestBinary(
+    publicKey: string | Uint8Array,
+    data: string | Uint8Array,
+    options: { timeoutMs?: number } = {},
+  ): Promise<BinaryResponse> {
+    // The device assigns the tag and returns it in the SENT reply, which may
+    // race with the response. Subscribe first and buffer responses that arrive
+    // before we learn the tag.
+    const buffered: BinaryResponse[] = [];
+    let tag: number | undefined;
+    let deliver: ((r: BinaryResponse) => void) | undefined;
+    const off = this.connection.on('push', (f) => {
+      if (f.type !== 'binaryResponse') return;
+      if (tag === undefined) buffered.push(f.response);
+      else if (f.response.tag === tag) deliver?.(f.response);
+    });
+
+    try {
+      const sent = expectOk(await this.connection.request(encode.sendBinaryReq(publicKey, data)));
+      if (sent.type !== 'sent') throw new Error(`expected sent, got ${sent.type}`);
+      tag = sent.result.expectedAck;
+
+      const early = buffered.find((r) => r.tag === tag);
+      if (early) return early;
+
+      return await new Promise<BinaryResponse>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('MeshCore: timed out waiting for binary response')),
+          options.timeoutMs ?? 30_000,
+        );
+        deliver = (r) => {
+          clearTimeout(timer);
+          resolve(r);
+        };
+      });
+    } finally {
+      off();
+    }
+  }
+
   /**
    * Trace a route through the given node hashes, collecting per-hop SNR.
    * Resolves when the correlated TRACE_DATA push returns.
@@ -474,6 +537,12 @@ export class MeshCore {
         break;
       case 'traceData':
         this.emitter.emit('traceData', frame.trace);
+        break;
+      case 'rawData':
+        this.emitter.emit('rawData', frame.data);
+        break;
+      case 'controlData':
+        this.emitter.emit('controlData', frame.data);
         break;
       case 'contactDeleted':
         this.emitter.emit('contactDeleted', frame.publicKey);

@@ -298,6 +298,18 @@ export function decodeFrame(frame: Uint8Array): DecodedFrame {
         trace: { tag, authCode, flags, hops, finalSnr: r.i8() / 4 },
       };
     }
+    case Push.RAW_DATA: {
+      const snr = r.i8() / 4;
+      const rssi = r.i8();
+      r.u8(); // reserved (0xFF)
+      return { type: 'rawData', data: { snr, rssi, payload: r.rest() } };
+    }
+    case Push.CONTROL_DATA: {
+      const snr = r.i8() / 4;
+      const rssi = r.i8();
+      const pathLen = r.u8();
+      return { type: 'controlData', data: { snr, rssi, pathLen, payload: r.rest() } };
+    }
     case Push.MSG_WAITING:
       return { type: 'messageWaiting' };
     case Push.CONTACT_DELETED:
